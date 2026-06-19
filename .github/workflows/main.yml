@@ -1,0 +1,42 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write        # create the Release
+  id-token: write        # mint OIDC token for attestation
+  attestations: write    # store the provenance attestation
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish single-file exe
+        run: >
+          dotnet publish FirewallManager.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:Platform=x64
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish
+      - name: Generate SHA-256 checksum
+        shell: pwsh
+        run: |
+          $exe = "publish/FirewallManager.exe"
+          (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() + "  FirewallManager.exe" |
+            Out-File -Encoding ascii publish/FirewallManager.exe.sha256
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: publish/FirewallManager.exe
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            publish/FirewallManager.exe
+            publish/FirewallManager.exe.sha256
