@@ -1,0 +1,567 @@
+<Window x:Class="FirewallManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Firewall Rule Manager" Height="740" Width="1250"
+        Background="#111827" FontFamily="Segoe UI" FontSize="13">
+
+    <Window.Resources>
+
+        <!-- Button -->
+        <Style x:Key="BtnBase" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.82"/></Trigger>
+                            <Trigger Property="IsPressed"   Value="True"><Setter Property="Opacity" Value="0.65"/></Trigger>
+                            <Trigger Property="IsEnabled"   Value="False"><Setter Property="Opacity" Value="0.30"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- TextBox -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#1f2937"/>
+            <Setter Property="Foreground" Value="#f9fafb"/>
+            <Setter Property="BorderBrush" Value="#374151"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="CaretBrush" Value="#f9fafb"/>
+            <Setter Property="SelectionBrush" Value="#3b82f6"/>
+        </Style>
+
+        <!-- ComboBox full custom template -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#f9fafb"/>
+            <Setter Property="Background" Value="#1f2937"/>
+            <Setter Property="BorderBrush" Value="#374151"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="border" Background="#1f2937"
+                                    BorderBrush="#374151" BorderThickness="1" CornerRadius="3"/>
+                            <ContentPresenter x:Name="contentSite"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              Margin="10,0,28,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"
+                                              TextBlock.Foreground="#f9fafb"/>
+                            <ToggleButton BorderThickness="0" Background="Transparent"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent">
+                                            <Path Data="M0,0 L5,5 L10,0" Stroke="#9ca3af" StrokeThickness="1.5"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Margin="0,0,10,0"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   PopupAnimation="Fade">
+                                <Border Background="#1f2937"
+                                        BorderBrush="#374151" BorderThickness="1"
+                                        MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="280"
+                                        Effect="{x:Null}">
+                                    <ScrollViewer Background="#1f2937">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ComboBoxItem -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#f9fafb"/>
+            <Setter Property="Background" Value="#1f2937"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter TextBlock.Foreground="#f9fafb"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#374151"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#1d4ed8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- DataGrid -->
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="#111827"/>
+            <Setter Property="Foreground" Value="#e5e7eb"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="RowBackground" Value="#111827"/>
+            <Setter Property="AlternatingRowBackground" Value="#161f2e"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#1f2937"/>
+            <Setter Property="ColumnHeaderHeight" Value="38"/>
+            <Setter Property="RowHeight" Value="34"/>
+            <Setter Property="SelectionMode" Value="Single"/>
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#1e3a5f"/>
+            <Setter Property="Foreground" Value="#93c5fd"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="BorderBrush" Value="#1f2937"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" VerticalAlignment="Center"
+                                                  HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="SortArrow" Grid.Column="1" Text=""
+                                           Foreground="#fbbf24" FontSize="10" FontWeight="Bold"
+                                           Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="SortDirection" Value="Ascending">
+                                <Setter TargetName="SortArrow" Property="Text" Value="▲"/>
+                            </Trigger>
+                            <Trigger Property="SortDirection" Value="Descending">
+                                <Setter TargetName="SortArrow" Property="Text" Value="▼"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#e5e7eb"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#1d4ed8"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="DataGridRow">
+            <Style.Triggers>
+                <Trigger Property="IsSelected"  Value="True"><Setter Property="Background" Value="#1d4ed8"/></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1f2f4a"/></Trigger>
+            </Style.Triggers>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
+            <!-- Logo (drawn — cyan flame shield, no external asset). Click = review consent. -->
+            <Viewbox Width="30" Height="30" Margin="0,0,10,0" VerticalAlignment="Center"
+                     Cursor="Hand" MouseLeftButtonUp="Logo_Click"
+                     ToolTip="View the terms you accepted">
+                <Canvas Width="24" Height="24">
+                    <Path Fill="#0e7490" Data="M12,1 L21,5 L21,12 C21,18 17,21 12,23 C7,21 3,18 3,12 L3,5 Z"/>
+                    <Path Fill="#22d3ee" Data="M12,3 L19,6 L19,12 C19,17 15.5,19.5 12,21 C8.5,19.5 5,17 5,12 L5,6 Z" Opacity="0.35"/>
+                    <Path Fill="#67e8f9" Data="M12,7 C9.5,10 8.5,12 10.5,14.5 C9.5,14.5 9,15.5 10,17 C11,18 12,17 12,17 C12,17 13,18 14,17 C15,15.5 14.5,14.5 13.5,14.5 C15.5,12 14.5,10 12,7 Z"/>
+                </Canvas>
+            </Viewbox>
+            <TextBlock Text="Firewall Rule Manager" FontSize="20" FontWeight="Bold"
+                       Foreground="#f9fafb" VerticalAlignment="Center"/>
+            <TextBlock x:Name="AdminWarning"
+                       Text="  ⚠ Run as Administrator for full access"
+                       Foreground="#fbbf24" VerticalAlignment="Center" FontSize="12"
+                       Visibility="Collapsed"/>
+        </StackPanel>
+
+        <!-- Toolbar -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto" MinWidth="320"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                <TextBox x:Name="SearchBox" Width="230" Height="32"
+                         TextChanged="SearchBox_TextChanged"
+                         ToolTip="Search by name, IP, port, program"/>
+                <ComboBox x:Name="FilterCombo" Width="160" Margin="8,0,0,0"
+                          SelectionChanged="FilterCombo_SelectionChanged">
+                    <ComboBoxItem Content="— Show All —"/>
+                    <ComboBoxItem Content="All Rules"/>
+                    <ComboBoxItem Content="Enabled Only" IsSelected="True"/>
+                    <ComboBoxItem Content="Disabled Only"/>
+                    <ComboBoxItem Content="Inbound Only"/>
+                    <ComboBoxItem Content="Outbound Only"/>
+                    <ComboBoxItem Content="Allow Only"/>
+                    <ComboBoxItem Content="Block Only"/>
+                    <ComboBoxItem Content="GPO-Script Only"/>
+                    <ComboBoxItem Content="GPO-Manual Only"/>
+                    <ComboBoxItem Content="Local Only"/>
+                </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
+                <!-- Context-sensitive Enable/Disable toggle -->
+                <Button x:Name="BtnToggleRule" Content="Enable" Background="#374151"
+                        Style="{StaticResource BtnBase}" Margin="0,0,5,0" Padding="10,5"
+                        Click="BtnToggleRule_Click" IsEnabled="False"
+                        ToolTip="Enable or disable the selected rule"/>
+                <Button Content="↺ Refresh" Background="#1d4ed8"
+                        Style="{StaticResource BtnBase}" Margin="0,0,5,0" Padding="10,5"
+                        Click="BtnRefresh_Click"/>
+                <Button Content="📄 Export" Background="#374151"
+                        Style="{StaticResource BtnBase}" Margin="0,0,5,0" Padding="10,5"
+                        Click="BtnExportRules_Click" ToolTip="Export current rule list to text file"/>
+                <Button Content="⚙ Setup" Background="#7c3aed"
+                        Style="{StaticResource BtnBase}" Margin="0,0,5,0" Padding="10,5"
+                        Click="BtnSetup_Click" ToolTip="Configure and apply firewall rules"/>
+                <Button x:Name="BtnPurgeLocal" Content="🧹 Purge Local" Background="#b45309"
+                        Style="{StaticResource BtnBase}" Margin="0,0,5,0" Padding="10,5"
+                        Click="BtnPurgeLocal_Click"
+                        ToolTip="Back up and delete all Windows-generated Local rules"/>
+                <Button Content="📋 Log" Background="#374151"
+                        Style="{StaticResource BtnBase}" Padding="10,5"
+                        Click="BtnLogging_Click" ToolTip="Show/hide firewall log window"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- DataGrid — no context menu -->
+        <DataGrid x:Name="RulesGrid" Grid.Row="2"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  SelectionChanged="RulesGrid_SelectionChanged"
+                  MouseDoubleClick="RulesGrid_DoubleClick"
+                  CanUserResizeRows="False" CanUserReorderColumns="True"
+                  CanUserSortColumns="True"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <DataGrid.Columns>
+
+                <DataGridTemplateColumn Header="St." Width="46" SortMemberPath="ActiveBool">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Ellipse Width="11" Height="11" Fill="{Binding StateDot}"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Source" Width="102" SortMemberPath="Source">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border CornerRadius="3" Padding="5,2"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                                    Margin="2,0" Background="{Binding SourceBadgeBrush}">
+                                <TextBlock Text="{Binding Source}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="White" VerticalAlignment="Center"/>
+                            </Border>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Dir" Width="60">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DirGlyph}" Foreground="{Binding DirBrush}"
+                                       FontSize="20" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       ToolTip="{Binding Direction}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Name"           Binding="{Binding NameDisplay}"   Width="240"/>
+
+                <DataGridTextColumn Header="Action"         Binding="{Binding Action}"         Width="66">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="Allow">
+                                    <Setter Property="Foreground" Value="#34d399"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Trigger>
+                                <Trigger Property="Text" Value="Block">
+                                    <Setter Property="Foreground" Value="#f87171"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Proto"          Binding="{Binding Protocol}"       Width="60"/>
+                <DataGridTextColumn Header="Port(s)"        Binding="{Binding Ports}"          Width="75"/>
+                <DataGridTextColumn Header="Remote Address" Binding="{Binding RemoteAddress}"  Width="210"/>
+                <DataGridTextColumn Header="Program"        Binding="{Binding ProgramDisplay}"     Width="150">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="ToolTip" Value="{Binding Program}"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Active"         Binding="{Binding Active}"         Width="66">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="TRUE">
+                                    <Setter Property="Foreground" Value="#34d399"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Trigger>
+                                <Trigger Property="Text" Value="FALSE">
+                                    <Setter Property="Foreground" Value="#4b5563"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Bottom panel — 3 sections -->
+        <Border x:Name="BottomPanel" Grid.Row="3" Background="#1f2937" CornerRadius="6"
+                Margin="0,10,0,0" Padding="12,8"
+                BorderBrush="#374151" BorderThickness="1">
+            <ScrollViewer x:Name="BottomScroll"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled">
+                <Grid MinWidth="300"
+                      Width="{Binding ViewportWidth, ElementName=BottomScroll}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="GpoCol" Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                <!-- Section 1: GPO Profile Status (left half) -->
+                <DockPanel x:Name="GpoHalf" Grid.Column="0">
+                    <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0" Width="90">
+                        <TextBlock Text="GPO Profile" Foreground="#93c5fd" FontWeight="SemiBold" FontSize="12"/>
+                        <TextBlock Text="Status"      Foreground="#93c5fd" FontWeight="SemiBold" FontSize="12"/>
+                    </StackPanel>
+                    <ItemsControl x:Name="ProfilePanel">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#111827" CornerRadius="5"
+                                        Margin="0,0,10,0" Padding="10,6"
+                                        BorderBrush="#374151" BorderThickness="1">
+                                    <StackPanel MinWidth="150">
+                                        <TextBlock Text="{Binding ProfileName}"
+                                                   Foreground="#93c5fd" FontWeight="Bold"
+                                                   FontSize="12" Margin="0,0,0,6"/>
+                                        <!-- One iOS-style toggle per setting -->
+                                        <ItemsControl ItemsSource="{Binding Toggles}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="62"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Label}" Foreground="#9ca3af"
+                                                                   FontSize="11" VerticalAlignment="Center"/>
+                                                        <!-- The switch: pill colored by safety, knob aligned by state -->
+                                                        <Border Grid.Column="1" Width="38" Height="20" CornerRadius="10"
+                                                                Background="{Binding PillBrush}" Cursor="Hand"
+                                                                MouseLeftButtonUp="ProfileToggle_Click"
+                                                                ToolTip="Click to change. Opening a default asks first.">
+                                                            <Ellipse Width="16" Height="16" Fill="White"
+                                                                     HorizontalAlignment="{Binding KnobAlign}"
+                                                                     Margin="2,0"/>
+                                                        </Border>
+                                                        <TextBlock Grid.Column="2" Text="{Binding ValueText}"
+                                                                   Foreground="#e5e7eb" FontSize="10"
+                                                                   VerticalAlignment="Center" Margin="6,0,0,0" Width="34"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+
+                <!-- Controls (right half) — consolidated so they toggle as a unit -->
+                <StackPanel x:Name="ControlsHalf" Grid.Column="1" Orientation="Horizontal">
+
+                <!-- Section 2: Quick toggles -->
+                <Border Background="#111827" CornerRadius="5"
+                        Margin="10,0,10,0" Padding="12,6"
+                        BorderBrush="#374151" BorderThickness="1">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Quick Toggle" Foreground="#93c5fd"
+                                   FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6"
+                                   HorizontalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnQuickHTTPS" Content="🌐 HTTPS"
+                                    Background="#374151" Foreground="#9ca3af"
+                                    Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                    Margin="0,0,4,0" Click="BtnQuickHTTPS_Click"
+                                    ToolTip="Toggle CUSTOM_HTTPS_Out rule"/>
+                            <Button x:Name="BtnQuickHTTP" Content="🌐 HTTP"
+                                    Background="#374151" Foreground="#9ca3af"
+                                    Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                    Margin="0,0,4,0" Click="BtnQuickHTTP_Click"
+                                    ToolTip="Toggle CUSTOM_HTTP_Out rule"/>
+                            <Button x:Name="BtnQuickDNS" Content="🔍 DNS"
+                                    Background="#374151" Foreground="#9ca3af"
+                                    Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                    Click="BtnQuickDNS_Click"
+                                    ToolTip="Toggle CUSTOM_DNS_UDP_Out rule"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Section 4: Rule actions -->
+                <Border Background="#111827" CornerRadius="5"
+                        Margin="0,0,10,0" Padding="12,6" BorderBrush="#374151" BorderThickness="1">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Rule Actions" Foreground="#93c5fd"
+                                   FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6"
+                                   HorizontalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnAddRule" Content="➕ New" Background="#15803d"
+                                    Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                    Margin="0,0,4,0" Click="BtnAddRule_Click"/>
+                            <Button x:Name="BtnEditRule" Content="✏ Edit" Background="#1d4ed8"
+                                    Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                    Margin="0,0,4,0" IsEnabled="False" Click="BtnEditRule_Click"/>
+                            <Button x:Name="BtnDeleteRule" Content="🗑 Del" Background="#b91c1c"
+                                    Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                    IsEnabled="False" Click="BtnDeleteRule_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Section 5: DNS Client service -->
+                <Border Background="#111827" CornerRadius="5"
+                        Padding="12,6" BorderBrush="#374151" BorderThickness="1">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="DNS Client" Foreground="#93c5fd"
+                                   FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6"
+                                   HorizontalAlignment="Center"/>
+                        <Button x:Name="BtnDnsClient" Content="● checking…"
+                                Background="#374151" Foreground="#9ca3af"
+                                Style="{StaticResource BtnBase}" Padding="8,5" FontSize="11"
+                                Click="BtnDnsClient_Click"
+                                ToolTip="Dnscache service status — click to schedule disable / re-enable"/>
+                    </StackPanel>
+                </Border>
+
+                </StackPanel> <!-- /ControlsHalf -->
+                </Grid>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Status bar (hidden in tight mode — the tab bar takes this row) -->
+        <Grid Grid.Row="4" Margin="0,8,0,0">
+            <Grid x:Name="StatusBar">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText" Foreground="#6b7280" FontSize="11"
+                           VerticalAlignment="Center" Text="Ready"/>
+                <TextBlock x:Name="CountText" Grid.Column="1" Foreground="#4b5563"
+                           FontSize="11" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Tight-space tabs: occupy the status-bar row, switch the panel halves.
+                 Two tabs always fit any width. RadioButtons (one active) styled flat. -->
+            <StackPanel x:Name="BottomTabs" Orientation="Horizontal" Visibility="Collapsed">
+                <StackPanel.Resources>
+                    <Style TargetType="RadioButton">
+                        <Setter Property="Margin" Value="0,0,4,0"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Foreground" Value="#9ca3af"/>
+                        <Setter Property="FontSize" Value="11"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="RadioButton">
+                                    <Border x:Name="tb" Background="#1f2937" CornerRadius="4,4,0,0"
+                                            Padding="12,5" BorderBrush="#374151" BorderThickness="1,1,1,0">
+                                        <ContentPresenter HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="tb" Property="Background" Value="#1d4ed8"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </StackPanel.Resources>
+                <RadioButton x:Name="TabControls" GroupName="BottomHalf" Content="Controls"
+                             IsChecked="True" Checked="TabControls_Checked"/>
+                <RadioButton x:Name="TabStatus" GroupName="BottomHalf" Content="Status"
+                             Checked="TabStatus_Checked"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

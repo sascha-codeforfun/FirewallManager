@@ -1,0 +1,331 @@
+<Window x:Class="FirewallManager.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Firewall Setup" Height="780" Width="620"
+        Background="#1c1917" FontFamily="Segoe UI" FontSize="13"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+
+    <Window.Resources>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#93c5fd"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,14,0,6"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#9ca3af"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Width" Value="130"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#1f2937"/>
+            <Setter Property="Foreground" Value="#f9fafb"/>
+            <Setter Property="BorderBrush" Value="#374151"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="CaretBrush" Value="#f9fafb"/>
+        </Style>
+        <Style x:Key="ToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="48"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="track" CornerRadius="12" Background="#374151"/>
+                            <Ellipse x:Name="thumb" Width="18" Height="18" Fill="White"
+                                     HorizontalAlignment="Left" Margin="3,0,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="track" Property="Background" Value="#15803d"/>
+                                <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="thumb" Property="Margin" Value="0,0,3,0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="BtnAction" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="18,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85"/></Trigger>
+                            <Trigger Property="IsPressed"   Value="True"><Setter Property="Opacity" Value="0.7"/></Trigger>
+                            <Trigger Property="IsEnabled"   Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,10" LastChildFill="True">
+            <Button x:Name="BtnCleanSlate" DockPanel.Dock="Right"
+                    Content="↻ Clean slate (re-detect)" Click="BtnCleanSlate_Click"
+                    Background="#78350f" Foreground="#fbbf24" BorderThickness="0" Padding="10,4"
+                    Margin="14,0,0,0" Cursor="Hand" FontSize="11" VerticalAlignment="Center"
+                    ToolTip="Ignore existing rules. Re-detect everything from the live machine and replace on apply."/>
+            <StackPanel Orientation="Horizontal">
+                <Viewbox Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center">
+                    <Canvas Width="16" Height="16">
+                        <Ellipse Width="16" Height="16" Fill="#1d4ed8"/>
+                        <Path Fill="White" Data="M8,3 C5,6 4,8 6,10 C5,10 4,11 5,13 C6,14 8,13 8,13 C8,13 10,14 11,13 C12,11 11,10 10,10 C12,8 11,6 8,3Z"/>
+                    </Canvas>
+                </Viewbox>
+                <TextBlock Text="Firewall Setup" FontSize="18" FontWeight="Bold"
+                           Foreground="#f9fafb" VerticalAlignment="Center"/>
+                <TextBlock x:Name="SetupMode" Text="  — first run defaults" Foreground="#6b7280"
+                           FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Scrollable content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,8,0">
+
+                <TextBlock Text="NETWORK" Style="{StaticResource SectionHeader}"/>
+                <Border Background="#292524" CornerRadius="6" Padding="14,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Own IP" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtOwnIP" Width="220" TextChanged="NetField_TextChanged" Tag="own"/>
+                            <TextBlock x:Name="TagOwnIP" Text="" FontSize="10" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Gateway IP" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtGateway" Width="220" TextChanged="NetField_TextChanged" Tag="gw"/>
+                            <TextBlock x:Name="TagGateway" Text="" FontSize="10" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="DNS Server(s)" Style="{StaticResource FieldLabel}"/>
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox x:Name="TxtDNS1" Width="170" ToolTip="Primary DNS"
+                                             TextChanged="NetField_TextChanged" Tag="dns"/>
+                                    <ComboBox x:Name="CboDNS1Preset" Width="130" Margin="6,0,0,0"
+                                              SelectionChanged="CboDNSPreset_Changed" Tag="1">
+                                        <ComboBoxItem Content="— pick preset —" IsSelected="True"/>
+                                        <ComboBoxItem Content="Gateway (auto)"    Tag="gateway"/>
+                                        <ComboBoxItem Content="Google 8.8.8.8"    Tag="8.8.8.8"/>
+                                        <ComboBoxItem Content="Google 8.8.4.4"    Tag="8.8.4.4"/>
+                                        <ComboBoxItem Content="OpenDNS 208.67.222.222" Tag="208.67.222.222"/>
+                                        <ComboBoxItem Content="OpenDNS 208.67.220.220" Tag="208.67.220.220"/>
+                                        <ComboBoxItem Content="Cloudflare 1.1.1.1"    Tag="1.1.1.1"/>
+                                        <ComboBoxItem Content="Cloudflare 1.0.0.1"    Tag="1.0.0.1"/>
+                                        <ComboBoxItem Content="Quad9 9.9.9.9"         Tag="9.9.9.9"/>
+                                        <ComboBoxItem Content="Quad9 149.112.112.112" Tag="149.112.112.112"/>
+                                    </ComboBox>
+                                    <TextBlock x:Name="TagDNS" Text="" FontSize="10" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBox x:Name="TxtDNS2" Width="170" ToolTip="Secondary DNS (optional)"
+                                             TextChanged="NetField_TextChanged" Tag="dns2"/>
+                                    <ComboBox x:Name="CboDNS2Preset" Width="130" Margin="6,0,0,0"
+                                              SelectionChanged="CboDNSPreset_Changed" Tag="2">
+                                        <ComboBoxItem Content="— pick preset —" IsSelected="True"/>
+                                        <ComboBoxItem Content="Gateway (auto)"    Tag="gateway"/>
+                                        <ComboBoxItem Content="Google 8.8.8.8"    Tag="8.8.8.8"/>
+                                        <ComboBoxItem Content="Google 8.8.4.4"    Tag="8.8.4.4"/>
+                                        <ComboBoxItem Content="OpenDNS 208.67.222.222" Tag="208.67.222.222"/>
+                                        <ComboBoxItem Content="OpenDNS 208.67.220.220" Tag="208.67.220.220"/>
+                                        <ComboBoxItem Content="Cloudflare 1.1.1.1"    Tag="1.1.1.1"/>
+                                        <ComboBoxItem Content="Cloudflare 1.0.0.1"    Tag="1.0.0.1"/>
+                                        <ComboBoxItem Content="Quad9 9.9.9.9"         Tag="9.9.9.9"/>
+                                        <ComboBoxItem Content="Quad9 149.112.112.112" Tag="149.112.112.112"/>
+                                    </ComboBox>
+                                    <TextBlock x:Name="TagDNS2" Text="" FontSize="10" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="INBOUND" Style="{StaticResource SectionHeader}"/>
+                <Border Background="#292524" CornerRadius="6" Padding="14,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="RDP Source IP" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="TxtRDPSource" Width="220" TextChanged="NetField_TextChanged" Tag="rdp"/>
+                            <TextBlock x:Name="TagRDP" Text="" FontSize="10" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="OUTBOUND — CORE" Style="{StaticResource SectionHeader}"/>
+                <Border Background="#292524" CornerRadius="6" Padding="14,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="HTTP (port 80)" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogHTTP" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                            <TextBlock Text="Any destination, any process" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="HTTPS (port 443)" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogHTTPS" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                            <TextBlock Text="Any destination, any process" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="NTP (port 123)" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogNTP" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                            <TextBlock Text="Gateway only" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="OUTBOUND — APPS" Style="{StaticResource SectionHeader}"/>
+                <Border Background="#292524" CornerRadius="6" Padding="14,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="GitHub" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogGitHub" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                            <TextBlock Text="HTTPS to GitHub IP ranges" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="  + DNS rule" Style="{StaticResource FieldLabel}" Foreground="#4b5563"/>
+                            <ToggleButton x:Name="TogGitHubDNS" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="UDP 53 companion rule" Foreground="#4b5563" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="NuGet" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogNuGet" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                            <TextBlock Text="HTTPS, resolved at apply time" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="  + DNS rule" Style="{StaticResource FieldLabel}" Foreground="#4b5563"/>
+                            <ToggleButton x:Name="TogNuGetDNS" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="UDP 53 companion rule" Foreground="#4b5563" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Claude / Anthropic" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogClaude" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                            <TextBlock Text="HTTPS, resolved at apply time" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="  + DNS rule" Style="{StaticResource FieldLabel}" Foreground="#4b5563"/>
+                            <ToggleButton x:Name="TogClaudeDNS" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="UDP 53 companion rule (any destination)" Foreground="#4b5563" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="OUTBOUND — BROWSERS  (disabled by default)" Style="{StaticResource SectionHeader}"/>
+                <Border Background="#292524" CornerRadius="6" Padding="14,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Microsoft Edge" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogEdge" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="Enable on apply" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="  + DNS rule" Style="{StaticResource FieldLabel}" Foreground="#4b5563"/>
+                            <ToggleButton x:Name="TogEdgeDNS" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="UDP 53 companion rule" Foreground="#4b5563" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Google Chrome" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogChrome" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="Enable on apply" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="  + DNS rule" Style="{StaticResource FieldLabel}" Foreground="#4b5563"/>
+                            <ToggleButton x:Name="TogChromeDNS" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="UDP 53 companion rule" Foreground="#4b5563" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Mozilla Firefox" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogFirefox" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="Enable on apply" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="  + DNS rule" Style="{StaticResource FieldLabel}" Foreground="#4b5563"/>
+                            <ToggleButton x:Name="TogFirefoxDNS" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="UDP 53 companion rule" Foreground="#4b5563" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="OUTBOUND — UPDATES  (disabled by default)" Style="{StaticResource SectionHeader}"/>
+                <Border Background="#292524" CornerRadius="6" Padding="14,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Windows Update" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogWinUpdate" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="Enable on apply" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Visual Studio" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogVSUpdate" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="Enable on apply" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Office Update" Style="{StaticResource FieldLabel}"/>
+                            <ToggleButton x:Name="TogOfficeUpdate" Style="{StaticResource ToggleStyle}" IsChecked="False"/>
+                            <TextBlock Text="Enable on apply" Foreground="#6b7280" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"/>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="📄  Export Config" Background="#374151"
+                        Style="{StaticResource BtnAction}" Margin="0,0,8,0"
+                        Click="BtnExportConfig_Click" ToolTip="Save current config to a text file to share or review"/>
+                <Button Content="⬇  config.json" Background="#374151"
+                        Style="{StaticResource BtnAction}" Margin="0,0,8,0"
+                        Click="BtnExportJson_Click"
+                        ToolTip="Write the app's knowledge (noise, DNS presets, service ranges, org-tags) to an editable config.json template"/>
+            </StackPanel>
+
+            <Button Grid.Column="2" Content="⚡  Apply Rules" Background="#1d4ed8"
+                    x:Name="BtnApply"
+                    Style="{StaticResource BtnAction}" Margin="0,0,8,0"
+                    Click="BtnApply_Click"/>
+            <Button Grid.Column="3" x:Name="BtnClose" Content="Close" Background="#374151"
+                    Style="{StaticResource BtnAction}" Click="BtnClose_Click"/>
+        </Grid>
+
+        <TextBlock x:Name="SetupStatus" Grid.Row="3" Margin="0,8,0,0"
+                   Foreground="#6b7280" FontSize="11" TextWrapping="Wrap"/>
+    </Grid>
+</Window>
