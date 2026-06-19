@@ -6,6 +6,8 @@ FirewallManager reads and writes firewall rules and profile policy **directly fr
 
 > **This is a power tool.** It modifies the same registry locations that govern your machine's network security. A wrong rule can lock you out of the network or expose a service you meant to keep closed. It is built for people who already understand Windows Firewall and want a faster, more legible way to drive it.
 
+![FirewallManager main window](assets/screenshot-main.png)
+
 ---
 
 ## Features
