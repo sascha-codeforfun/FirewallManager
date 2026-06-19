@@ -1,8 +1,12 @@
 name: Release
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', '[0-9]*']   # matches v1.0.0 AND 1.0.0
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach assets to (e.g. 1.0.0)'
+        required: true
 permissions:
   contents: write        # create the Release
   id-token: write        # mint OIDC token for attestation
@@ -37,6 +41,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             publish/FirewallManager.exe
             publish/FirewallManager.exe.sha256
