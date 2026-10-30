@@ -1,0 +1,43 @@
+<Application x:Class="FirewallManager.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme/HueTheme.xaml" />
+                <ResourceDictionary Source="Theme/AppIcons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Network tag (rule list and log): Local green, Remote/Mixed amber, Any red,
+                 No address / Unknown / None indigo.
+                 Bound to LocalityTone, which is empty (neutral tag) where no colour applies. -->
+            <Style x:Key="NetworkTag" TargetType="ContentControl" BasedOn="{StaticResource Hue.Tag}">
+                <Style.Triggers>
+                    <!-- Outliers ("No address": the lookup got none; "Unknown": the address can't be
+                         read; "None": the rule has no IPv4 address) use the indigo Rare.* brushes,
+                         a deliberate exception to the kit, defined contrast-aware by each window. -->
+                    <DataTrigger Binding="{Binding LocalityTone}" Value="Rare">
+                        <Setter Property="Foreground"  Value="{DynamicResource Rare.Text}" />
+                        <Setter Property="Background"  Value="{DynamicResource Rare.Soft}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Rare.Edge}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding LocalityTone}" Value="Safe">
+                        <Setter Property="Foreground"  Value="{DynamicResource Brush.OkText}" />
+                        <Setter Property="Background"  Value="{DynamicResource Brush.OkSoft}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.OkEdge}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding LocalityTone}" Value="Caution">
+                        <Setter Property="Foreground"  Value="{DynamicResource Brush.WarnText}" />
+                        <Setter Property="Background"  Value="{DynamicResource Brush.WarnSoft}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.WarnEdge}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding LocalityTone}" Value="Unsafe">
+                        <Setter Property="Foreground"  Value="{DynamicResource Brush.ErrorText}" />
+                        <Setter Property="Background"  Value="{DynamicResource Brush.ErrorSoft}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ErrorEdge}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

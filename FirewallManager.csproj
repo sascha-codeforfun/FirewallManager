@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>FirewallManager</AssemblyName>
+    <RootNamespace>FirewallManager</RootNamespace>
+    <Nullable>enable</Nullable>
+    <Platforms>x64</Platforms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Version, shown in the header and the log window so a screenshot says which build it
+       is. Raised with every delivered revision. A build script passing -p:Version=… wins
+       over this value. No source-control hash appended, so Git and zip builds match. -->
+  <PropertyGroup>
+    <Version>2.0.55</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <!-- Publish: one self-contained exe with native libraries bundled inside. -->
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <!-- Reproducible build: no PDB, so no build-folder path baked into the assembly. -->
+  <PropertyGroup>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!-- Build provenance shown in the header: the SDK that compiled this exe. No build date or
+       machine name is recorded, so reproducible builds stay byte-identical. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="BuildSdkVersion" Value="$(NETCoreSdkVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Header artwork, supplied with the icon set. -->
+    <Resource Include="Assets\app_256.png" />
+  </ItemGroup>
+
+</Project>

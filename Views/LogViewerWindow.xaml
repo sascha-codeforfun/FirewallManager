@@ -1,0 +1,650 @@
+<Window x:Class="FirewallManager.LogViewerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:FirewallManager"
+        Style="{StaticResource Hue.Window}"
+        Title="Connection Log" Height="600" Width="1660">
+    <!-- Size and position are set from the screen at open (ScreenFit); these are fallbacks. -->
+
+    <Window.Resources>
+        <!-- Filter buttons: theme buttons; an active filter is Tonal (accent tint), and its
+             label says which filter it is. Keys kept: the code switches between them. -->
+        <Style x:Key="FilterBtn" TargetType="Button" BasedOn="{StaticResource Hue.Button}"/>
+        <Style x:Key="FilterBtnActive" TargetType="Button" BasedOn="{StaticResource Hue.Button.Tonal}"/>
+        <Style x:Key="FilterBtnWarn" TargetType="Button" BasedOn="{StaticResource Hue.Button.Tonal}"/>
+        <Style x:Key="FilterBtnGood" TargetType="Button" BasedOn="{StaticResource Hue.Button.Tonal}"/>
+
+        <!-- Deliberate exception to the kit: the "rare kind" tag for unusual protocols (ICMP, GRE,
+             protocol numbers) uses Indigo, another family's colour, so it reads as exotic next to
+             the neutral TCP and amber UDP tags. Keep it off the kit's accent (Hue.Tag.Accent).
+             Contrast themes: ApplyRareHue swaps the Rare.* brushes to system colours in code,
+             the same way HueContrast treats the theme. -->
+        <SolidColorBrush x:Key="Rare.Text.Hue" Color="{StaticResource Indigo.Light}"/>
+        <SolidColorBrush x:Key="Rare.Soft.Hue" Color="{StaticResource Indigo.Soft}"/>
+        <SolidColorBrush x:Key="Rare.Edge.Hue" Color="{StaticResource Indigo.Edge}"/>
+        <SolidColorBrush x:Key="Rare.Text" Color="{StaticResource Indigo.Light}"/>
+        <SolidColorBrush x:Key="Rare.Soft" Color="{StaticResource Indigo.Soft}"/>
+        <SolidColorBrush x:Key="Rare.Edge" Color="{StaticResource Indigo.Edge}"/>
+        <Style x:Key="Tag.Rare" TargetType="ContentControl" BasedOn="{StaticResource Hue.Tag}">
+            <Setter Property="Foreground" Value="{DynamicResource Rare.Text}"/>
+            <Setter Property="Background" Value="{DynamicResource Rare.Soft}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Rare.Edge}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+        <!-- Title on its own line, the buttons below it, then the counts -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Connection Log" Style="{StaticResource Text.Heading}" VerticalAlignment="Center"/>
+            <!-- Which build a screenshot of this window comes from. -->
+            <TextBlock x:Name="LogVersion" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+        <!-- Wraps only when the screen is too narrow: the window opens wide enough for one line. -->
+        <WrapPanel x:Name="Toolbar" Orientation="Horizontal">
+            <Button x:Name="BtnRefreshLog" local:IconText.Icon="Icon.Refresh" local:IconText.Text="Refresh"
+                    Style="{StaticResource FilterBtn}" Margin="0,0,8,0"
+                    Click="BtnRefreshLog_Click"
+                    ToolTip="Read the log again and judge every row afresh (rules, DNS cache, networks)."/>
+            <!-- Adds what Windows records after the read, without reading again. On by default
+                 in Live (SetSource). -->
+            <Button x:Name="BtnFollow" local:IconText.Icon="Icon.Play" local:IconText.Text="Follow ✗"
+                    Style="{StaticResource FilterBtn}" Margin="0,0,8,0"
+                    Click="BtnFollow_Click"
+                    ToolTip="Add new connections to the view as Windows records them. Live: the moment they happen. File: Windows writes the file late, in batches."/>
+            <Border Style="{StaticResource Hue.Divider}" Margin="4,6,12,6"/>
+            <TextBlock Text="Source:" Foreground="{DynamicResource Brush.TextMuted}" FontSize="11"
+                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Button x:Name="BtnSourceFile" local:IconText.Icon="Icon.File" local:IconText.Text="File" Style="{StaticResource FilterBtnActive}"
+                    Margin="0,0,4,0" Click="BtnSourceFile_Click"
+                    ToolTip="pfirewall.log — history; Windows writes it late"/>
+            <Button x:Name="BtnSourceLive" local:IconText.Icon="Icon.Live" local:IconText.Text="Live" Style="{StaticResource FilterBtn}"
+                    Margin="0,0,4,0" Click="BtnSourceLive_Click"
+                    ToolTip="Security log — blocked connections the moment they happen, with the program"/>
+            <!-- Tag="live" / Tag="file": shown only with that source (ApplySourceGroups), so the
+                 File | Live toggle decides which recording switches are on the toolbar. -->
+            <Button x:Name="BtnLiveAllows" local:IconText.Icon="Icon.Check" local:IconText.Text="Allows ✗" Style="{StaticResource FilterBtn}" Tag="live"
+                    Margin="0,0,8,0" Click="BtnLiveAllows_Click" Visibility="Collapsed"
+                    ToolTip="Live mode: also record allowed connections (event 5156). Fills the Security log quickly."/>
+            <!-- Windows' DNS client log: every name lookup, with the program that asked. On when
+                 you ask, offered off on every close (like connection auditing), so it can also
+                 stay on for a long observation. -->
+            <Button x:Name="BtnDnsLog" Content="DNS log ✗" Style="{StaticResource FilterBtn}" Tag="live"
+                    Margin="0,0,8,0" Click="BtnDnsLog_Click" Visibility="Collapsed"
+                    ToolTip="Record every DNS lookup this machine makes (Windows' DNS client log)."/>
+            <!-- Process starts (Security event 4688) with command lines: names service hosts that
+                 ended before they could be looked up — above all the ones started at boot.
+                 Armed before a reboot, it records the start of Windows. -->
+            <Button x:Name="BtnProcStarts" Content="Process starts ✗" Style="{StaticResource FilterBtn}" Tag="live"
+                    Margin="0,0,8,0" Click="BtnProcStarts_Click" Visibility="Collapsed"
+                    ToolTip="Record every program start with its command line (Security log). Arm it before a reboot to name what runs at boot."/>
+            <!-- The firewall's text log (pfirewall.log), which feeds the File view only. -->
+            <TextBlock Text="Text log:" Foreground="{DynamicResource Brush.TextMuted}" FontSize="11" Tag="file"
+                       VerticalAlignment="Center" Margin="4,0,6,0"/>
+            <Button x:Name="BtnLogDrops" local:IconText.Icon="Icon.Block" local:IconText.Text="Drops" Style="{StaticResource FilterBtn}" Tag="file"
+                    Margin="0,0,3,0" Click="BtnLogDrops_Click"
+                    ToolTip="The firewall's text log: blocked connections (what the File view shows)"/>
+            <Button x:Name="BtnLogAllow" local:IconText.Icon="Icon.Check" local:IconText.Text="Allow" Style="{StaticResource FilterBtn}" Tag="file"
+                    Margin="0,0,8,0" Click="BtnLogAllow_Click"
+                    ToolTip="The firewall's text log: allowed connections"/>
+            <Border Style="{StaticResource Hue.Divider}" Margin="4,6,12,6"/>
+            <TextBlock Text="Scope:" Foreground="{DynamicResource Brush.TextMuted}" FontSize="11"
+                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <!-- Time window: 1–30 minutes back from now, last position = All. Default 5 min.
+                 Keys are the slider's own: ← → 1 min, PgUp PgDn 5, Home 1 min, End All. The kit's
+                 sliders show no focus, and WPF's focus visual shows only after Tab, while a click
+                 gives this one the keys too: the ring is drawn here whenever it has them, in the
+                 colour of the theme's focus ring. -->
+            <Border VerticalAlignment="Center" Margin="0,0,8,0" Padding="4,0"
+                    CornerRadius="10" BorderThickness="2">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=ScopeSlider}" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.AccentLight}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Slider x:Name="ScopeSlider" Width="150" Minimum="1" Maximum="31" Value="5"
+                        SmallChange="1" LargeChange="5" TickFrequency="1" IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center" ValueChanged="ScopeSlider_ValueChanged"
+                        AutomationProperties.Name="Time window in minutes"
+                        ToolTip="How far back to show: 1 to 30 minutes, or All at the far right"/>
+            </Border>
+            <TextBlock x:Name="ScopeLabel" Text="5 min" MinWidth="52" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Brush.Text}" Margin="0,0,6,0"/>
+            <Button x:Name="BtnClear"  local:IconText.Icon="Icon.Clean" local:IconText.Text="Clear" Style="{StaticResource FilterBtn}"
+                    Margin="0,0,8,0" Click="BtnClear_Click"
+                    ToolTip="Hide everything up to this moment and show only what happens from now on. Click again to move the mark; All brings everything back."/>
+            <Border Style="{StaticResource Hue.Divider}" Margin="4,6,12,6"/>
+            <TextBlock Text="Filter:" Foreground="{DynamicResource Brush.TextMuted}" FontSize="11"
+                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Button x:Name="BtnDropsOnly"     local:IconText.Icon="Icon.Block" local:IconText.Text="DROPs only" Style="{StaticResource FilterBtn}"
+                    Margin="0,0,3,0" Click="BtnDropsOnly_Click"/>
+            <Button x:Name="BtnAllowsOnly"    local:IconText.Icon="Icon.Check" local:IconText.Text="Allows only" Style="{StaticResource FilterBtn}"
+                    Margin="0,0,3,0" Click="BtnAllowsOnly_Click"
+                    ToolTip="Show only ALLOW records (Windows logs these only when allowed-connection logging is on)"/>
+            <!-- Noise filter: master toggle (traffic light) + arrow opens surgical menu -->
+            <Border Margin="0,0,8,0">
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnNoiseMaster" Style="{StaticResource FilterBtn}"
+                            Click="BtnNoiseMaster_Click"
+                            ToolTip="Noise filter: green = all suppressed · amber = some · red = none. Click to toggle all.">
+                        <StackPanel Orientation="Horizontal">
+                            <!-- A drawn dot, not an emoji: Windows 10's emoji font has no
+                                 coloured-circle emoji and shows an empty box instead. -->
+                            <Ellipse x:Name="NoiseLight" Width="8" Height="8" Margin="0,0,6,0"
+                                     VerticalAlignment="Center" Fill="{DynamicResource Brush.OkText}"/>
+                            <TextBlock x:Name="NoiseLabel" Text="Noise" FontSize="11"
+                                       Foreground="{DynamicResource Brush.OkText}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnNoiseArrow" Content="▾" Style="{StaticResource FilterBtn}"
+                            Click="BtnNoiseArrow_Click"
+                            ToolTip="Choose which noise categories to suppress"/>
+                </StackPanel>
+            </Border>
+            <Popup x:Name="NoisePopup" PlacementTarget="{Binding ElementName=BtnNoiseArrow}"
+                   Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                <Border Style="{StaticResource Hue.PopupPanel}" Padding="12,10">
+                    <StackPanel x:Name="NoiseMenuPanel" MinWidth="170">
+                        <TextBlock Text="Suppress noise categories" Foreground="{DynamicResource Brush.TextMuted}"
+                                   FontSize="11" Margin="0,0,0,6"/>
+                        <!-- One switch per noise category in use (built-in or config.json) goes in
+                             here from code (BuildNoiseMenu), above this one. -->
+                        <CheckBox x:Name="NoiseDnsByRule" Content="DNS your rules allow" Tag="DNS (your rules)" IsChecked="True" Margin="0,2" Checked="NoiseCategory_Toggled" Unchecked="NoiseCategory_Toggled"
+                                  ToolTip="Hide outgoing DNS that one of your switched-on rules allows. Any other outgoing DNS shows, marked; DNS to this machine counts as loopback."/>
+                        <!-- The categories say what is noise, these two where it is hidden: a row is
+                             hidden only when its category and its address family are both on. A
+                             family this machine has no address of is dimmed (RefreshFamilySwitches),
+                             still clickable: older rows may hold it. -->
+                        <Separator Margin="0,6"/>
+                        <CheckBox x:Name="NoiseIPv4" Content="IPv4" IsChecked="True" Margin="0,2"
+                                  Checked="NoiseFamily_Toggled" Unchecked="NoiseFamily_Toggled"/>
+                        <CheckBox x:Name="NoiseIPv6" Content="IPv6" IsChecked="True" Margin="0,2"
+                                  Checked="NoiseFamily_Toggled" Unchecked="NoiseFamily_Toggled"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
+            <Border Style="{StaticResource Hue.Divider}" Margin="4,6,12,6"/>
+            <Button x:Name="BtnExport" local:IconText.Icon="Icon.Save" local:IconText.Text="Export" Style="{StaticResource FilterBtn}"
+                    Margin="0,0,3,0" Click="BtnExport_Click"
+                    ToolTip="Save current view to a text file"/>
+        </WrapPanel>
+        <DockPanel Margin="2,8,0,0" LastChildFill="True">
+            <!-- Shown while the Log tab is filtered to one talker; one click shows everyone again. -->
+            <Button x:Name="BtnTalkerFilter" DockPanel.Dock="Right" Style="{StaticResource Hue.Button.Tonal}"
+                    Visibility="Collapsed" Click="BtnTalkerFilter_Click" Margin="12,0,0,0"
+                    ToolTip="Showing one talker only. Click to show all talkers again."/>
+            <TextBlock x:Name="LogCount" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+        </DockPanel>
+        <!-- Why every DNS row is flagged: shown while no switched-on DNS rule of this app exists,
+             gone by itself once one does. Indigo, the "off" colour: nothing is wrong, it's a state.
+             No close button: it shows what is true for as long as it is. -->
+        <Border x:Name="DnsBanner" Margin="0,10,0,0" Padding="10,6" CornerRadius="6" BorderThickness="1"
+                Background="{DynamicResource Rare.Soft}" BorderBrush="{DynamicResource Rare.Edge}"
+                Visibility="Collapsed">
+            <TextBlock x:Name="DnsBannerText" Foreground="{DynamicResource Rare.Text}" TextWrapping="Wrap"/>
+        </Border>
+        <!-- Live is the main view; when drop auditing is off the viewer opens on the file and
+             offers Live here (shown/hidden from code). -->
+        <ContentControl x:Name="LiveHint" Style="{StaticResource Hue.Callout}" Margin="0,10,0,0" Visibility="Collapsed">
+            <DockPanel LastChildFill="True">
+                <Button x:Name="BtnLiveHint" DockPanel.Dock="Right" local:IconText.Icon="Icon.Live" local:IconText.Text="Turn on Live view" Style="{StaticResource Hue.Button.Tonal}"
+                        Click="BtnSourceLive_Click" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Showing the log file" FontWeight="SemiBold"/>
+                    <TextBlock Foreground="{DynamicResource Brush.TextDim}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Live view shows blocked connections the moment they happen, with the program behind them. It needs Windows' drop auditing, which is off."/>
+                </StackPanel>
+            </DockPanel>
+        </ContentControl>
+        </StackPanel>
+
+        <!-- Log grid: cell selection with ClipboardCopyMode lets Ctrl+C copy cells with headers. -->
+        <TabControl x:Name="ViewTabs" Grid.Row="1" SelectionChanged="ViewTabs_SelectionChanged">
+        <TabItem Header="Log">
+        <DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,8,0,8" LastChildFill="True">
+                <!-- The rows in view, grouped, as plain text for an AI chat; the export button
+                     writes them to a file instead. -->
+                <Button x:Name="BtnCopyLog" DockPanel.Dock="Right" Content="Copy for AI"
+                        Click="BtnCopyLog_Click"
+                        ToolTip="Copy the connections in this view, identical ones grouped, with what each was and what happened, as text to paste into an AI chat."/>
+                <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                           Text="The rows below, with the filters above applied."/>
+            </DockPanel>
+        <DataGrid x:Name="LogGrid"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  SelectionMode="Extended"
+                  SelectionUnit="Cell"
+                  ClipboardCopyMode="IncludeHeader"
+                  FontFamily="{StaticResource Font.Mono}" FontSize="12"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsDnsAnomaly}" Value="True">
+                            <Setter Property="Background" Value="{Binding RowTint}"/>
+                        </DataTrigger>
+                        <!-- A firewall reload, network change or clock change between the
+                             connections, not a connection. -->
+                        <DataTrigger Binding="{Binding IsMarker}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+                            <Setter Property="FontStyle" Value="Italic"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+            <DataGrid.ContextMenu>
+                <ContextMenu x:Name="LogContextMenu" Opened="LogContextMenu_Opened">
+                    <MenuItem x:Name="MnuWhoOwns" Header="Who owns this connection?"
+                              Click="MnuWhoOwns_Click"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Time"      Binding="{Binding Time}"      Width="178"/>
+                <!-- Action as a signal tag. ALLOW = safe (green): went through as intended.
+                     DROP = caution (amber): something wants to talk and can't; worth a look, then
+                     stop it or allow it. An ALLOW that should not have happened (🚨 unexpected) =
+                     unsafe (red). No glow in rows. -->
+                <!-- Width: at least its widest word, the NETWORK marker's (FitActionColumn). -->
+                <DataGridTemplateColumn x:Name="ActionColumn" Header="Action" Width="92" SortMemberPath="Action"
+                                        ClipboardContentBinding="{Binding Action}">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ContentControl x:Name="ActionTag" Style="{StaticResource Hue.Tag}"
+                                            Content="{Binding Action}" FontFamily="{StaticResource Font.Ui}"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding Action}" Value="ALLOW">
+                                    <Setter TargetName="ActionTag" Property="Style" Value="{StaticResource Hue.Tag.Safe}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Action}" Value="DROP">
+                                    <Setter TargetName="ActionTag" Property="Style" Value="{StaticResource Hue.Tag.Caution}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsUnexpectedAllow}" Value="True">
+                                    <Setter TargetName="ActionTag" Property="Style" Value="{StaticResource Hue.Tag.Unsafe}"/>
+                                    <Setter TargetName="ActionTag" Property="ToolTip" Value="Allowed, but not expected"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- Protocol = which kind of traffic (a tag, not a status): TCP is the norm (neutral),
+                     UDP is connectionless and worth a look (caution), anything else is rare. The
+                     tooltip gives the number. Marker rows have no protocol: no tag at all. -->
+                <DataGridTemplateColumn Header="Proto" Width="84" SortMemberPath="Protocol"
+                                        ClipboardContentBinding="{Binding Protocol}">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ContentControl x:Name="ProtoTag" Style="{StaticResource Tag.Rare}"
+                                            Content="{Binding Protocol}" FontFamily="{StaticResource Font.Ui}"
+                                            ToolTip="{Binding ProtocolTip}"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding Protocol}" Value="TCP">
+                                    <Setter TargetName="ProtoTag" Property="Style" Value="{StaticResource Hue.Tag}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Protocol}" Value="UDP">
+                                    <Setter TargetName="ProtoTag" Property="Style" Value="{StaticResource Hue.Tag.Caution}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsMarker}" Value="True">
+                                    <Setter TargetName="ProtoTag" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Src IP"    Binding="{Binding SrcIP}"     Width="140"/>
+                <DataGridTextColumn Header="Dst IP"    Binding="{Binding DstIP}"     Width="150"/>
+                <DataGridTemplateColumn Header="Network" Width="100" SortMemberPath="Locality"
+                                        ClipboardContentBinding="{Binding Locality}">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ContentControl x:Name="NetTag" Style="{StaticResource NetworkTag}" Content="{Binding Locality}"
+                                            ToolTip="{Binding LocalityTip}" FontFamily="{StaticResource Font.Ui}"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsMarker}" Value="True">
+                                    <Setter TargetName="NetTag" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <!-- A text too long for the column ends in "…"; its tooltip has it in full (a marker
+                     line's tooltip starts with its text). -->
+                <DataGridTextColumn Header="Resolved"  Binding="{Binding ResolvedDisplay}"  Width="180">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{Binding ResolvedBrush}"/>
+                            <Setter Property="ToolTip" Value="{Binding ResolvedTip}"/>
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                            <Setter Property="FontFamily" Value="{StaticResource Font.Ui}"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Src Port"  Binding="{Binding SrcPort}"   Width="80"/>
+                <DataGridTextColumn Header="Dst Port"  Binding="{Binding DstPort}"   Width="80"/>
+                <DataGridTextColumn Header="Direction" Binding="{Binding Direction}" Width="96"/>
+                <!-- Shown with hidden characters made visible; copy and sort use the stored text. -->
+                <DataGridTextColumn x:Name="ProgramColumn" Header="Program" Binding="{Binding ProgramShown}"
+                                    SortMemberPath="ProgramPlain" ClipboardContentBinding="{Binding ProgramPlain}"
+                                    Width="230" Visibility="Collapsed">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="ToolTip" Value="{Binding ProgramTip}"/>
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="FontFamily" Value="{StaticResource Font.Ui}"/>
+                            <!-- Coloured by what the program file is, as in the rules list (ProgramTrust). -->
+                            <Style.Triggers>
+                            <DataTrigger Binding="{Binding ProgramTone}" Value="Windows">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Ok}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ProgramTone}" Value="Signed">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ProgramTone}" Value="Pinned">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ProgramTone}" Value="Unsigned">
+                                <Setter Property="Foreground" Value="{DynamicResource Rare.Text}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ProgramTone}" Value="Off">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.WarnText}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ProgramTone}" Value="Mismatch">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.ErrorText}"/>
+                            </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Rule"      Binding="{Binding RuleDisplay}"  Width="150"
+                                    SortMemberPath="RulePlain" ClipboardContentBinding="{Binding RulePlain}">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{Binding RuleBrush}"/>
+                            <Setter Property="ToolTip" Value="{Binding RuleTip}"/>
+                            <Setter Property="FontFamily" Value="{StaticResource Font.Ui}"/>
+                            <Setter Property="FontStyle"  Value="Italic"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <!-- Live only: the filter that decided, named while its ID still holds (see NameFilters). -->
+                <DataGridTextColumn x:Name="FilterColumn" Header="Filter" Binding="{Binding FilterName}"
+                                    SortMemberPath="FilterPlain" ClipboardContentBinding="{Binding FilterPlain}"
+                                    Width="170" Visibility="Collapsed">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="ToolTip" Value="{Binding FilterTip}"/>
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                            <Setter Property="FontFamily" Value="{StaticResource Font.Ui}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.TextDim}"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+        </DockPanel>
+        </TabItem>
+
+        <!-- One row per talker (program + service in Live, destination in File mode), for the
+             same scope and filters as the Log tab. Ranked by outgoing drops: the to-do list for
+             getting to zero. Double-click or "Show in log" filters the Log tab to that talker. -->
+        <TabItem Header="Talkers">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,8,0,8" LastChildFill="True">
+                    <Button x:Name="BtnShowTalker" DockPanel.Dock="Right" Content="Show in log ▸"
+                            Style="{StaticResource Hue.Button.Tonal}" IsEnabled="False"
+                            Click="BtnShowTalker_Click"/>
+                    <!-- Turns what was seen into a rule you still read, adjust and save yourself.
+                         Live mode only: the log file doesn't know which program it was. -->
+                    <Button x:Name="BtnAllowTalker" DockPanel.Dock="Right" Content="Allow…"
+                            IsEnabled="False" Margin="0,0,8,0" Click="BtnAllowTalker_Click"
+                            ToolTipService.ShowOnDisabled="True"
+                            ToolTip="Open a rule for this talker, filled in from what it tried. Nothing is saved until you save it."/>
+                    <!-- Every talker in the list, with its traffic, as plain text on the clipboard:
+                         for pasting into an AI (or a note) to identify and sort. -->
+                    <Button x:Name="BtnCopyTalkers" DockPanel.Dock="Right" Content="Copy for AI"
+                            Margin="0,0,8,0" Click="BtnCopyTalkers_Click"
+                            ToolTip="Copy all talkers in this list, with what each one tried, where to and what happened, as text to paste into an AI chat."/>
+                    <Button x:Name="BtnForgetQuiet" DockPanel.Dock="Right" Content="Forget quiet ones"
+                            Style="{StaticResource Hue.Button.Ghost}" Margin="0,0,8,0" Visibility="Collapsed"
+                            Click="BtnForgetQuiet_Click"
+                            ToolTip="Remove talkers that aren't in the current scope from this list (they come back if they talk again)."/>
+                    <TextBlock x:Name="TalkerSummary" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+                </DockPanel>
+                <DataGrid x:Name="TalkerGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                          SelectionMode="Single" CanUserSortColumns="True"
+                          SelectionChanged="TalkerGrid_SelectionChanged"
+                          MouseDoubleClick="TalkerGrid_MouseDoubleClick"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <!-- Quiet talkers (seen earlier in this session, not in the current scope) keep
+                         their row in the muted text colour, below the active ones. -->
+                    <DataGrid.CellStyle>
+                        <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsQuiet}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.CellStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Talker" Binding="{Binding Name}" Width="300"
+                                            SortMemberPath="Key" ClipboardContentBinding="{Binding Key}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding FullTip}"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProgramTone}" Value="Windows">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Ok}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProgramTone}" Value="Signed">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProgramTone}" Value="Pinned">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProgramTone}" Value="Unsigned">
+                                            <Setter Property="Foreground" Value="{DynamicResource Rare.Text}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProgramTone}" Value="Off">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.WarnText}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProgramTone}" Value="Mismatch">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.ErrorText}"/>
+                                        </DataTrigger>
+
+                                        <DataTrigger Binding="{Binding IsQuiet}" Value="True">
+                                            <Setter Property="FontWeight" Value="Normal"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Last seen" Binding="{Binding LastSeenText}" Width="100"
+                                            SortMemberPath="LastSeen"/>
+                        <DataGridTemplateColumn Header="Origin" Width="150" SortMemberPath="Origin">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl Style="{StaticResource Hue.Tag}" Content="{Binding Origin}"
+                                                    ToolTip="{Binding OriginTip}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Out drops" Width="100" SortMemberPath="OutDrops">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <!-- Outgoing drops are the chase: amber while there are any. The number
+                                         sits centred in a width that fits three digits, so badges line up. -->
+                                    <ContentControl x:Name="Count" Style="{StaticResource Hue.Tag}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding OutDrops}" MinWidth="24" TextAlignment="Center"/>
+                                    </ContentControl>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding HasOutDrops}" Value="True">
+                                            <Setter TargetName="Count" Property="Style" Value="{StaticResource Hue.Tag.Caution}"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="In drops"     Binding="{Binding InDrops}"      Width="90"/>
+                        <DataGridTextColumn Header="Allows"       Binding="{Binding Allows}"       Width="80"/>
+                        <DataGridTextColumn Header="Destinations" Binding="{Binding Destinations}" Width="110"/>
+                        <DataGridTemplateColumn Header="Network" Width="100" SortMemberPath="Locality"
+                                                ClipboardContentBinding="{Binding Locality}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl Style="{StaticResource NetworkTag}" Content="{Binding Locality}"
+                                                    ToolTip="{Binding LocalityTip}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Top destinations" Binding="{Binding TopDest}" Width="*" MinWidth="260">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding TopDest}"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Ports" Binding="{Binding Ports}" Width="130"/>
+                        <DataGridTextColumn Header="Rule"  Binding="{Binding RuleStatus}" Width="200"
+                                            SortMemberPath="RulePlain" ClipboardContentBinding="{Binding RulePlain}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding RuleTip}"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                    <Setter Property="FontStyle" Value="Italic"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </TabItem>
+        <!-- DNS lookups from Windows' DNS client log (event 3008), for the same scope: one row per
+             name, with who asked and what came back. Read when this tab is shown or refreshed.
+             Programs with their own resolver (a browser's secure DNS) never appear here. -->
+        <TabItem x:Name="LookupsTab" Header="Lookups">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,8,0,8" LastChildFill="True">
+                    <Button x:Name="BtnCopyLookups" DockPanel.Dock="Right" Content="Copy for AI"
+                            Click="BtnCopyLookups_Click"
+                            ToolTip="Copy these lookups (name, who asked, the answer) as text to paste into an AI chat."/>
+                    <TextBlock x:Name="LookupSummary" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                               TextWrapping="Wrap"/>
+                </DockPanel>
+                <DataGrid x:Name="LookupGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                          SelectionMode="Single" CanUserSortColumns="True"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="320">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding NameTip}"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Asked" Binding="{Binding Asked}" Width="70"/>
+                        <DataGridTextColumn Header="Asked by" Binding="{Binding Programs}" Width="260"
+                                            SortMemberPath="ProgramsPlain" ClipboardContentBinding="{Binding ProgramsPlain}">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding ProgramsToolTip}"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <!-- Answered is the norm (neutral); a failed lookup is the outlier (amber). -->
+                        <DataGridTemplateColumn Header="Result" Width="130" SortMemberPath="Result">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl x:Name="ResultTag" Style="{StaticResource Hue.Tag}" Content="{Binding Result}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Failed}" Value="True">
+                                            <Setter TargetName="ResultTag" Property="Style" Value="{StaticResource Hue.Tag.Caution}"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <!-- Flags: DNS around your resolver (encrypted-DNS servers) or names shaped like
+                             carried data (long/random labels, many names per domain, TXT). Amber, only
+                             where there is one; flagged rows sort first. Hover for why. -->
+                        <DataGridTemplateColumn Header="Flag" Width="150" SortMemberPath="Flag">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl x:Name="FlagTag" Style="{StaticResource Hue.Tag.Caution}" Content="{Binding Flag}"
+                                                    ToolTip="{Binding FlagTip}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Flagged}" Value="False">
+                                            <Setter TargetName="FlagTag" Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Answer" Binding="{Binding Answer}" Width="*" MinWidth="220">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="ToolTip" Value="{Binding AnswerTip}"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTemplateColumn Header="Network" Width="124" SortMemberPath="Locality"
+                                                ClipboardContentBinding="{Binding Locality}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ContentControl Style="{StaticResource NetworkTag}" Content="{Binding Locality}"
+                                                    ToolTip="{Binding LocalityTip}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Last asked" Binding="{Binding LastAskedText}" Width="100"
+                                            SortMemberPath="LastAsked"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </TabItem>
+        </TabControl>
+
+        <TextBlock Grid.Row="2" Text="Tip: Ctrl+C copies the selected cells; Shift/Ctrl+click selects several."
+                   Foreground="{DynamicResource Brush.TextMuted}" FontSize="11" Margin="0,5,0,2"/>
+
+        <TextBlock Grid.Row="3" x:Name="LogPath" Foreground="{DynamicResource Brush.TextMuted}"
+                   FontSize="11"/>
+    </Grid>
+</Window>

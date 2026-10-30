@@ -1,0 +1,728 @@
+<Window x:Class="FirewallManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:FirewallManager"
+        xmlns:kit="clr-namespace:HueThemeKit"
+        xmlns:busy="clr-namespace:BusyOverlayKit"
+        Style="{StaticResource Hue.Window}"
+        Title="Firewall Rule Manager" Height="780" Width="1280">
+    <!-- Size and position are set from the screen at launch (ScreenFit); these are fallbacks. -->
+
+    <Window.Resources>
+        <!-- Local stand-in until the kit has status-tinted buttons (Hue.Button.Tonal.Ok / .Error):
+             the kit's Tonal button with the Ok or Error tint instead of the accent. Tokens only. -->
+        <Style x:Key="Quick.Safe" TargetType="Button" BasedOn="{StaticResource Hue.Button.Tonal}">
+            <Setter Property="Background" Value="{DynamicResource Brush.OkSoft}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.OkEdge}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.OkSoft}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Ok}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="Quick.Unsafe" TargetType="Button" BasedOn="{StaticResource Hue.Button.Tonal}">
+            <Setter Property="Background" Value="{DynamicResource Brush.ErrorSoft}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.ErrorText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.ErrorEdge}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.ErrorSoft}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Error}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Flick's level picker (Ctrl+click on the logo): small neutral buttons, the level shown in the accent. -->
+        <Style x:Key="Flick.Pick" TargetType="Button" BasedOn="{StaticResource Hue.Button}">
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="Flick.Picked" TargetType="Button" BasedOn="{StaticResource Hue.Button.Tonal}">
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Section boxes inside the bottom card: inset (Base) with a soft edge. -->
+        <Style x:Key="PanelBox" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Brush.Base}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.LineSoft}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Control}"/>
+            <Setter Property="Padding" Value="12,8"/>
+        </Style>
+
+        <!-- Deliberate exception to the kit, as the log window's Rare tag: the outlier colour
+             (Indigo, another family's) for "off" in the header strip and the Network column's
+             "None". Contrast themes: ApplyRareHue swaps the Rare.* brushes to system colours. -->
+        <SolidColorBrush x:Key="Rare.Text.Hue" Color="{StaticResource Indigo.Light}"/>
+        <SolidColorBrush x:Key="Rare.Soft.Hue" Color="{StaticResource Indigo.Soft}"/>
+        <SolidColorBrush x:Key="Rare.Edge.Hue" Color="{StaticResource Indigo.Edge}"/>
+        <SolidColorBrush x:Key="Rare.Text" Color="{StaticResource Indigo.Light}"/>
+        <SolidColorBrush x:Key="Rare.Soft" Color="{StaticResource Indigo.Soft}"/>
+        <SolidColorBrush x:Key="Rare.Edge" Color="{StaticResource Indigo.Edge}"/>
+        <!-- A program name coloured by what the file is (ProgramTrust): dark green Windows' own,
+             light green signed or pinned, the outlier colour not signed, amber an off case, red a
+             changed pin. Not known yet: the normal text colour. -->
+        <Style x:Key="ProgramToneText" TargetType="TextBlock">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ProgramTone}" Value="Windows">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Ok}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProgramTone}" Value="Signed">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProgramTone}" Value="Pinned">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.OkText}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProgramTone}" Value="Unsigned">
+                    <Setter Property="Foreground" Value="{DynamicResource Rare.Text}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProgramTone}" Value="Off">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.WarnText}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProgramTone}" Value="Mismatch">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.ErrorText}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Pill.Rare" TargetType="ContentControl" BasedOn="{StaticResource Hue.Pill}">
+            <Setter Property="Foreground" Value="{DynamicResource Rare.Text}"/>
+            <Setter Property="Background" Value="{DynamicResource Rare.Soft}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Rare.Edge}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- header -->
+            <RowDefinition Height="*"/>     <!-- body   -->
+            <RowDefinition Height="Auto"/>  <!-- status -->
+            <RowDefinition Height="Auto"/>  <!-- tabs (tight mode only) -->
+        </Grid.RowDefinitions>
+
+        <!-- Header: app icon, name, one-line description. Click the icon = review consent. -->
+        <Border Grid.Row="0" Style="{StaticResource Hue.Header}">
+            <Grid>
+                <!-- Title and status strip share the free width: the title column is capped at its
+                     text's width (FitHeader), the strip column gets the rest and at least its pills.
+                     The weights make the title take the space first, so when narrow it clips. -->
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition x:Name="TitleCol" Width="1000*"/>
+                    <ColumnDefinition x:Name="StripCol" Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="Transparent" Cursor="Hand" VerticalAlignment="Center"
+                        MouseLeftButtonUp="Logo_Click" ToolTip="View the terms you accepted">
+                    <ContentControl Style="{StaticResource Hue.IconGlow}" Width="64" Height="64">
+                        <Image Source="/Assets/app_256.png" RenderOptions.BitmapScalingMode="HighQuality"
+                               AutomationProperties.Name="Firewall Rule Manager"/>
+                    </ContentControl>
+                </Border>
+                <StackPanel x:Name="TitlePanel" Grid.Column="1" Margin="18,0,24,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Firewall Rule Manager" Style="{StaticResource Text.Title}"
+                                   VerticalAlignment="Center"/>
+                        <ContentControl x:Name="AdminWarning" Style="{StaticResource Hue.Pill.Warn}"
+                                        Content="Run as Administrator for full access"
+                                        Margin="14,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <TextBlock Text="Browse, edit and audit Windows Firewall rules, profiles, connection and DNS logs, straight from the registry."
+                               Style="{StaticResource Text.Body}" Margin="0,4,0,0"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <!-- Status strip: facts about this machine, centred in the header's free middle.
+                     Room for more later. Style, text and tooltip set from code. -->
+                <StackPanel x:Name="FamilyStrip" Grid.Column="2" Orientation="Horizontal"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,0">
+                    <ContentControl x:Name="Ipv4Pill" Style="{StaticResource Hue.Pill}" Content="IPv4 ?"
+                                    VerticalAlignment="Center"/>
+                    <ContentControl x:Name="Ipv6Pill" Style="{StaticResource Hue.Pill}" Content="IPv6 ?"
+                                    Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    <!-- Flick, on request (Ctrl+click on the logo): show the plasters of any level and
+                         play the scene, for machines that are never behind. -->
+                    <StackPanel x:Name="FlickPicker" Orientation="Horizontal" Margin="14,0,0,0" Visibility="Collapsed">
+                        <Button Tag="real" Content="Real" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                ToolTip="This machine's own patch level"/>
+                        <Button Tag="1" Content="1" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                ToolTip="One Patch Tuesday missed"/>
+                        <Button Tag="2" Content="2–3" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                ToolTip="Two or three Patch Tuesdays missed"/>
+                        <Button Tag="4" Content="4+" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                ToolTip="Long overdue"/>
+                        <Button Tag="10" Content="Win 10" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                ToolTip="Windows 10 past its end of support"/>
+                        <Button Tag="play" Content="▶ Play" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                Margin="10,0,0,0" ToolTip="Play the scene now"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Which Windows this runs on: rules, DNS and GPO behave differently on
+                     Windows 10 / 11, Server, Home / Pro. Filled from OsInfo at startup. -->
+                <Button x:Name="OsButton" Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right"
+                        Margin="16,-4,-8,-4" Click="OsButton_Click" Cursor="Hand"
+                        FocusVisualStyle="{StaticResource Hue.FocusVisual}" AutomationProperties.Name="Windows version">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource Radius.Item}" Padding="8,4">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <StackPanel x:Name="OsPanel">
+                        <Grid HorizontalAlignment="Right">
+                            <TextBlock x:Name="OsTitle" FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Text}"/>
+                            <!-- The same words again, in a band of light that glides across now and then. -->
+                            <TextBlock x:Name="OsSweep" Text="{Binding Text, ElementName=OsTitle}" FontSize="15" FontWeight="SemiBold"
+                                       Foreground="Transparent" IsHitTestVisible="False"/>
+                            <!-- Plasters on the name while the last cumulative update is a while back (PatchScene). -->
+                            <Canvas x:Name="OsPlasters" IsHitTestVisible="False"/>
+                        </Grid>
+                        <Grid HorizontalAlignment="Right" Margin="0,2,0,0">
+                            <TextBlock x:Name="OsDetail" Style="{StaticResource Text.Caption}"/>
+                            <TextBlock x:Name="OsDetailSweep" Text="{Binding Text, ElementName=OsDetail}" Style="{StaticResource Text.Caption}"
+                                       Foreground="Transparent" IsHitTestVisible="False"/>
+                        </Grid>
+                    </StackPanel>
+                </Button>
+
+                <Border Grid.Column="4" Style="{StaticResource Hue.Divider}" Margin="20,6"/>
+
+                <!-- Build provenance (the SDK that compiled this exe, the runtime inside it), shown
+                     because this app sits on a trust boundary. -->
+                <StackPanel x:Name="BuildPanel" Grid.Column="5" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <!-- Version on top, so a screenshot says which build it shows. -->
+                    <TextBlock x:Name="BuildVersion" HorizontalAlignment="Right" FontSize="15" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="BuildSdk" HorizontalAlignment="Right" Style="{StaticResource Text.Caption}"/>
+                    <TextBlock x:Name="BuildRuntime" HorizontalAlignment="Right" Style="{StaticResource Text.Caption}"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- A stage over the whole header, for the patch scene (PatchScene). -->
+                <!-- Reaches down through the header's padding: its bottom is the floor Flick walks on. -->
+                <Canvas x:Name="Stage" Grid.ColumnSpan="6" IsHitTestVisible="False" Margin="0,0,0,-15"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="16,12,16,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Toolbar -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto" MinWidth="320"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
+                    <TextBox x:Name="SearchBox" Width="230"
+                             TextChanged="SearchBox_TextChanged"
+                             ToolTip="Search by name, IP, port, program"
+                             AutomationProperties.Name="Search rules"/>
+                    <ComboBox x:Name="FilterCombo" Width="160" Margin="8,0,0,0"
+                              SelectionChanged="FilterCombo_SelectionChanged">
+                        <ComboBoxItem Content="All Rules"/>
+                        <ComboBoxItem Content="Enabled Only" IsSelected="True"/>
+                        <ComboBoxItem Content="Disabled Only"/>
+                        <ComboBoxItem Content="Inbound Only"/>
+                        <ComboBoxItem Content="Outbound Only"/>
+                        <ComboBoxItem Content="Allow Only"/>
+                        <ComboBoxItem Content="Block Only"/>
+                        <ComboBoxItem Content="GPO-Script Only"/>
+                        <ComboBoxItem Content="GPO-Manual Only"/>
+                        <ComboBoxItem Content="Local Only"/>
+                    </ComboBox>
+                    <!-- Windows' own per-service rules, outside policy and local rules: shown, never changed. -->
+                    <Button local:IconText.Icon="Icon.Shield" local:IconText.Text="Service rules" Margin="8,0,0,0" Click="BtnServiceRules_Click"
+                            ToolTip="Windows' service-hardening rules: they restrict its services in a sublayer of their own, apart from your rules, and Purge Local, merge off and Lock down leave them as they are. Read only."/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Grid.Column="1" HorizontalAlignment="Right">
+                    <!-- Context-sensitive Enable/Disable toggle (style set from code) -->
+                    <Button x:Name="BtnToggleRule" local:IconText.Icon="Icon.Check" local:IconText.Text="Enable" Margin="0,0,6,0"
+                            ToolTipService.ShowOnDisabled="True"
+                            Click="BtnToggleRule_Click" IsEnabled="False"
+                            ToolTip="Enable or disable the selected rule"/>
+                    <Button local:IconText.Icon="Icon.Refresh" local:IconText.Text="Refresh" Margin="0,0,6,0" Click="BtnRefresh_Click"/>
+                    <Button local:IconText.Icon="Icon.Export" local:IconText.Text="Export" Margin="0,0,6,0"
+                            Click="BtnExportRules_Click" ToolTip="Export current rule list to text file"/>
+                    <Button local:IconText.Icon="Icon.Settings" local:IconText.Text="Setup" Style="{StaticResource Hue.Button.Tonal}" Margin="0,0,6,0"
+                            Click="BtnSetup_Click" ToolTip="Configure and apply firewall rules"/>
+                    <Button x:Name="BtnLockdown" local:IconText.Icon="Icon.Lock" local:IconText.Text="Lock down" Style="{StaticResource Hue.Button.Tonal}" Margin="0,0,6,0"
+                            Click="BtnLockdown_Click"
+                            ToolTip="Block in and out on all profiles, merge off, purge Windows' local rules, turn on recording. Over Remote Desktop: a rule for your connection, then confirm within 180 s."/>
+                    <Button x:Name="BtnPurgeLocal" local:IconText.Icon="Icon.Clean" local:IconText.Text="Purge Local" Style="{StaticResource Hue.Button.Danger}"
+                            Margin="0,0,6,0" Click="BtnPurgeLocal_Click" ToolTipService.ShowOnDisabled="True"
+                            ToolTip="Back up and delete all Windows-generated Local rules"/>
+                    <!-- Connection auditing (what Live mode reads) is a Windows setting that keeps
+                         running after this app closes: its state is shown here, read whenever this
+                         window is activated. A status, so a pill: amber while it's on. -->
+                    <ContentControl x:Name="AuditPill" Style="{StaticResource Hue.Pill}" Margin="4,0,6,0"
+                                    VerticalAlignment="Center" Content="Auditing …"/>
+                    <!-- Windows' DNS client log, the same way: amber while it records. -->
+                    <ContentControl x:Name="DnsLogPill" Style="{StaticResource Hue.Pill}" Margin="0,0,6,0"
+                                    VerticalAlignment="Center" Content="DNS log …"/>
+                    <!-- The firewall's text log is superseded by Live, so it shows only while on. -->
+                    <ContentControl x:Name="TextLogPill" Style="{StaticResource Hue.Pill.Warn}" Margin="0,0,6,0"
+                                    VerticalAlignment="Center" Content="Text log on" Visibility="Collapsed"/>
+                    <!-- Process starts (4688): only shown while on, e.g. armed for a reboot. -->
+                    <ContentControl x:Name="ProcStartsPill" Style="{StaticResource Hue.Pill.Warn}" Margin="0,0,6,0"
+                                    VerticalAlignment="Center" Content="Process starts on" Visibility="Collapsed"/>
+                    <Border Width="4"/>
+                    <Button local:IconText.Icon="Icon.Log" local:IconText.Text="Log" Click="BtnLogging_Click" ToolTip="Open the connection log: blocked and allowed connections, talkers and DNS lookups"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Merge on (or not configured) in any profile: states the problem, no advice, no
+                 dismiss; the log's DNS banner look. Shown and worded from code (RefreshMergeState). -->
+            <Border x:Name="MergeBanner" Grid.Row="1" Margin="0,0,0,10" Padding="10,6" CornerRadius="6" BorderThickness="1"
+                    Background="{DynamicResource Rare.Soft}" BorderBrush="{DynamicResource Rare.Edge}"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="MergeBannerText" Foreground="{DynamicResource Rare.Text}" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- Rules (no context menu). Categories are tags; whether a rule is live is a
+                 status, dot + pill, never a glow on the row. -->
+            <DataGrid x:Name="RulesGrid" Grid.Row="2"
+                      AutoGenerateColumns="False" IsReadOnly="True"
+                      SelectionChanged="RulesGrid_SelectionChanged"
+                      MouseDoubleClick="RulesGrid_DoubleClick"
+                      CanUserResizeRows="False" CanUserReorderColumns="True"
+                      CanUserSortColumns="True"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                <DataGrid.Columns>
+
+                    <DataGridTemplateColumn Header="St." Width="46" SortMemberPath="ActiveBool">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl x:Name="Dot" Style="{StaticResource Hue.Marker}"
+                                                Foreground="{DynamicResource Brush.Stale}" ToolTip="Inactive"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding ActiveBool}" Value="True">
+                                        <Setter TargetName="Dot" Property="Foreground" Value="{DynamicResource Brush.Ok}"/>
+                                        <Setter TargetName="Dot" Property="ToolTip" Value="Active"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Source" Width="150" SortMemberPath="Source">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <!-- GPO-Manual is imposed from outside (set in Group Policy, not by this app):
+                                     accent + lock. Script and Local are the norm: neutral. -->
+                                <ContentControl x:Name="SourceTag" Style="{StaticResource Hue.Tag}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path x:Name="SourceLock" Style="{StaticResource Hue.Icon}" Data="{StaticResource Icon.Lock}"
+                                              Margin="0,0,5,0" Visibility="Collapsed"/>
+                                        <TextBlock Text="{Binding Source}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ContentControl>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Source}" Value="GPO-Manual">
+                                        <Setter TargetName="SourceTag" Property="Style" Value="{StaticResource Hue.Tag.Accent}"/>
+                                        <Setter TargetName="SourceLock" Property="Visibility" Value="Visible"/>
+                                        <Setter TargetName="SourceTag" Property="ToolTip" Value="Managed in Group Policy, not by this app"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Dir" Width="92" SortMemberPath="Direction">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl x:Name="DirTag" Style="{StaticResource Hue.Tag.Safe}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path x:Name="DirIcon" Style="{StaticResource Hue.Icon}" Data="{StaticResource Icon.Out}"/>
+                                        <TextBlock Text="{Binding Direction}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ContentControl>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Direction}" Value="In">
+                                        <Setter TargetName="DirIcon" Property="Data" Value="{StaticResource Icon.In}"/>
+                                        <Setter TargetName="DirTag" Property="Style" Value="{StaticResource Hue.Tag.Caution}"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Windows' "@file,-id" names show resolved; the reference is in the tooltip.
+                         Hidden characters show visibly, with a ⚠ and the findings in the tooltip;
+                         sorting and Ctrl+C use the stored text. -->
+                    <DataGridTextColumn Header="Name"           Binding="{Binding NameDisplay}"   Width="240"
+                                        SortMemberPath="Name" ClipboardContentBinding="{Binding Name}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding NameTip}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <DataGridTemplateColumn Header="Action" Width="98" SortMemberPath="Action">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl x:Name="ActionTag" Style="{StaticResource Hue.Tag}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path x:Name="ActionIcon" Style="{StaticResource Hue.Icon}" Data="{StaticResource Icon.Check}"/>
+                                        <TextBlock Text="{Binding Action}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ContentControl>
+                                <DataTemplate.Triggers>
+                                    <!-- Action carries risk: Block is the safe kind (green); Allow is neutral
+                                         when scoped (fixed address or fixed program), amber when neither. -->
+                                    <DataTrigger Binding="{Binding Action}" Value="Block">
+                                        <Setter TargetName="ActionTag" Property="Style" Value="{StaticResource Hue.Tag.Safe}"/>
+                                        <Setter TargetName="ActionIcon" Property="Data" Value="{StaticResource Icon.Block}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsBlanket}" Value="True">
+                                        <Setter TargetName="ActionTag" Property="Style" Value="{StaticResource Hue.Tag.Caution}"/>
+                                        <Setter TargetName="ActionTag" Property="ToolTip" Value="Not scoped: any address and any program"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="Proto"          Binding="{Binding Protocol}"       Width="84">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding ProtocolTip}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Port(s)"        Binding="{Binding Ports}"          Width="75"/>
+                    <!-- RA4 and RA6, each on its own: never merged. The IPv6 column is hidden while
+                         this machine has no IPv6 address (header strip). -->
+                    <DataGridTextColumn Header="Remote IPv4"    Binding="{Binding RemoteV4}"       Width="180">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding RemoteTip}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn x:Name="ColRemoteV6" Header="Remote IPv6" Binding="{Binding RemoteV6}" Width="150">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding RemoteV6Tip}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <!-- Program takes the room left over on a wide window, so "svchost.exe (TermService)"
+                         and other service names read in full; on a narrow one it keeps 190 and the
+                         grid scrolls sideways. Anything still cut shows "…" and the tooltip.
+                         In front, 24 x 24 (ProgramIcons): the program's own icon, so an app's rules
+                         are found by eye; for one service in svchost.exe, a Windows icon that stands
+                         for it; or one of the app's own: a stand-in where Windows is trimmed of that
+                         icon, the alert (warning colour) when the program isn't there, the program
+                         icon when it wasn't checked. The space is kept when there is none (System,
+                         no program), so the names stay in line. -->
+                    <DataGridTemplateColumn Width="*" MinWidth="190"
+                                            SortMemberPath="Program" ClipboardContentBinding="{Binding Program}">
+                        <!-- The fingerprint button: every pinned program hashed now. Shown only while
+                             something is pinned; clicking it doesn't sort the column. -->
+                        <DataGridTemplateColumn.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Program" VerticalAlignment="Center"/>
+                                <Button x:Name="BtnCheckPins" Visibility="Collapsed" Margin="8,0,0,0" Padding="0"
+                                        MinHeight="0" MinWidth="0" Width="28" Height="24"
+                                        Style="{StaticResource Hue.Button.Ghost}" Click="BtnCheckPins_Click"
+                                        ToolTip="Check the fingerprints (SHA-256) of all pinned programs now"
+                                        AutomationProperties.Name="Check pinned programs">
+                                    <Path x:Name="PinsIcon" Style="{StaticResource Hue.Icon}" Data="{StaticResource Icon.Fingerprint}"/>
+                                </Button>
+                            </StackPanel>
+                        </DataGridTemplateColumn.Header>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <DockPanel VerticalAlignment="Center" LastChildFill="False">
+                                    <Grid DockPanel.Dock="Left" Width="24" Height="24" Margin="0,0,8,0"
+                                          VerticalAlignment="Center" Background="Transparent"
+                                          ToolTip="{Binding ProgramIconTip}">
+                                        <Image Source="{Binding ProgramImage}" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        <Viewbox>
+                                            <Path Data="{Binding ProgramGlyph}">
+                                                <Path.Style>
+                                                    <Style TargetType="Path" BasedOn="{StaticResource Hue.Icon}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ProgramAlert}" Value="True">
+                                                                <Setter Property="Stroke" Value="{DynamicResource Brush.WarnText}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ProgramAlertRed}" Value="True">
+                                                                <Setter Property="Stroke" Value="{DynamicResource Brush.ErrorText}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Path.Style>
+                                            </Path>
+                                        </Viewbox>
+                                    </Grid>
+                                    <!-- Name and mark together: the mark's room is kept first, so a long name
+                                         trims rather than pushing the mark out of the cell. -->
+                                    <DockPanel DockPanel.Dock="Left" HorizontalAlignment="Left" LastChildFill="True">
+                                    <!-- Pinned programs only: the fingerprint, light grey at rest, amber while
+                                         hashed, green once matched in this session, red when changed. -->
+                                    <Viewbox DockPanel.Dock="Right" Width="14" Height="14" Margin="6,0,0,0" VerticalAlignment="Center"
+                                             ToolTip="{Binding ProgramTip}">
+                                        <Viewbox.Style>
+                                            <Style TargetType="Viewbox">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding PinMark}" Value="None">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Viewbox.Style>
+                                        <Path Data="{StaticResource Icon.Fingerprint}">
+                                            <Path.Style>
+                                                <Style TargetType="Path" BasedOn="{StaticResource Hue.Icon}">
+                                                    <Setter Property="Stroke" Value="{DynamicResource Brush.TextDim}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding PinMark}" Value="Checking">
+                                                            <Setter Property="Stroke" Value="{DynamicResource Brush.WarnText}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding PinMark}" Value="Matched">
+                                                            <Setter Property="Stroke" Value="{DynamicResource Brush.OkText}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding PinMark}" Value="Changed">
+                                                            <Setter Property="Stroke" Value="{DynamicResource Brush.ErrorText}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Path.Style>
+                                        </Path>
+                                    </Viewbox>
+                                    <TextBlock Text="{Binding ProgramDisplay}" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding ProgramTip}" VerticalAlignment="Center"
+                                               Style="{StaticResource ProgramToneText}"/>
+                                    </DockPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- Network: is the remote IPv4 address on this machine's networks (Local) or not
+                         (Remote)? On Allow rules coloured by reach (Local green, Remote amber,
+                         Any red); neutral on Block rules. The tooltip names the network. -->
+                    <DataGridTemplateColumn Header="Network" Width="96" SortMemberPath="Locality">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl Style="{StaticResource NetworkTag}" Content="{Binding Locality}"
+                                                ToolTip="{Binding LocalityTip}"
+                                                HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Active" Width="96" SortMemberPath="ActiveBool">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl x:Name="ActivePill" Style="{StaticResource Hue.Pill.Stale}"
+                                                Content="Off" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding ActiveBool}" Value="True">
+                                        <Setter TargetName="ActivePill" Property="Style" Value="{StaticResource Hue.Pill.Ok}"/>
+                                        <Setter TargetName="ActivePill" Property="Content" Value="Active"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                </DataGrid.Columns>
+            </DataGrid>
+
+
+            <!-- Bottom panel: profile status left, controls right; tabs when they don't fit
+                 side by side (ApplyBottomLayout). -->
+            <Border x:Name="BottomPanel" Grid.Row="3" Style="{StaticResource Hue.Card}"
+                    Margin="0,10,0,0" Padding="12,10">
+                <ScrollViewer x:Name="BottomScroll"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <Grid MinWidth="300"
+                          Width="{Binding ViewportWidth, ElementName=BottomScroll}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="GpoCol" Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                    <!-- GPO profile status (left half) -->
+                    <DockPanel x:Name="GpoHalf" Grid.Column="0">
+                        <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0" Width="90">
+                            <TextBlock Text="GPO PROFILE" Style="{StaticResource Text.Section}"/>
+                            <TextBlock Text="STATUS"      Style="{StaticResource Text.Section}"/>
+                        </StackPanel>
+                        <ItemsControl x:Name="ProfilePanel">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource PanelBox}" Margin="0,0,10,0" Padding="10,6">
+                                        <StackPanel MinWidth="150">
+                                            <TextBlock Text="{Binding ProfileName}" Style="{StaticResource Text.TileTitle}"
+                                                       Margin="0,0,0,6"/>
+                                            <!-- One safety switch per setting -->
+                                            <ItemsControl ItemsSource="{Binding Toggles}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="62"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Brush.TextDim}"
+                                                                       FontSize="11" VerticalAlignment="Center"/>
+                                                            <!-- Kit signal switch: green safe, red unsafe, amber + centred hollow knob
+                                                                 when never set. A click is a request: the app confirms the unsafe
+                                                                 direction, writes the registry, and the switch follows the new state. -->
+                                                            <kit:HueSwitch Grid.Column="1" VerticalAlignment="Center"
+                                                                           Style="{StaticResource Hue.Switch.SafeWhenOn}"
+                                                                           IsChecked="{Binding SwitchState, Mode=OneWay}"
+                                                                           Content="{Binding ValueText}" FontSize="11"
+                                                                           StateChanging="ProfileToggle_StateChanging"
+                                                                           AutomationProperties.Name="{Binding Label}"
+                                                                           ToolTip="Click to change. Opening a default asks first."/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+
+                    <!-- Controls (right half) — consolidated so they toggle as a unit -->
+                    <StackPanel x:Name="ControlsHalf" Grid.Column="1" Orientation="Horizontal">
+
+                    <!-- Quick toggles (look set from code). HTTPS and HTTP are blanket opens; DNS is
+                         scoped, but still a way out. On is the risky side (red) for all three.
+                         A missing rule is an outline button with "—"; "?" only when it couldn't be read. -->
+                    <Border Style="{StaticResource PanelBox}" Margin="10,0,10,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="QUICK TOGGLE" Style="{StaticResource Text.Section}"
+                                       Margin="0,0,0,6" HorizontalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="BtnQuickHTTPS" local:IconText.Icon="Icon.Https" local:IconText.Text="HTTPS"
+                                        Margin="0,0,6,0" Click="BtnQuickHTTPS_Click"
+                                        ToolTip="Toggle CUSTOM_HTTPS_Out rule"/>
+                                <Button x:Name="BtnQuickHTTP" local:IconText.Icon="Icon.Http" local:IconText.Text="HTTP"
+                                        Margin="0,0,6,0" Click="BtnQuickHTTP_Click"
+                                        ToolTip="Toggle CUSTOM_HTTP_Out rule"/>
+                                <Button x:Name="BtnQuickDNS" local:IconText.Icon="Icon.Dns" local:IconText.Text="DNS"
+                                        Click="BtnQuickDNS_Click"
+                                        ToolTip="Toggle CUSTOM_DNS_UDP_Out rule"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Rule actions -->
+                    <Border Style="{StaticResource PanelBox}" Margin="0,0,10,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="RULE ACTIONS" Style="{StaticResource Text.Section}"
+                                       Margin="0,0,0,6" HorizontalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="BtnAddRule" local:IconText.Icon="Icon.Add" local:IconText.Text="New" Style="{StaticResource Hue.Button.Primary}"
+                                        Margin="0,0,6,0" Click="BtnAddRule_Click"/>
+                                <Button x:Name="BtnEditRule" local:IconText.Icon="Icon.Edit" local:IconText.Text="Edit"
+                                        Margin="0,0,6,0" IsEnabled="False" Click="BtnEditRule_Click"/>
+                                <Button x:Name="BtnCopyRule" local:IconText.Icon="Icon.Copy" local:IconText.Text="Copy"
+                                        Margin="0,0,6,0" IsEnabled="False" Click="BtnCopyRule_Click"
+                                        ToolTip="Open a copy of the selected rule as a new rule, to change and save under a new name"
+                                        AutomationProperties.Name="Copy rule"/>
+                                <Button x:Name="BtnDeleteRule" local:IconText.Icon="Icon.Trash" local:IconText.Text="Del" Style="{StaticResource Hue.Button.Danger}"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        IsEnabled="False" Click="BtnDeleteRule_Click"
+                                        ToolTip="Delete the selected rule" AutomationProperties.Name="Delete rule"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- DNS Client service (status dot + word set from code) -->
+                    <Border Style="{StaticResource PanelBox}">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="DNS CLIENT" Style="{StaticResource Text.Section}"
+                                       Margin="0,0,0,6" HorizontalAlignment="Center"/>
+                            <Button x:Name="BtnDnsClient" Content="checking…"
+                                    Click="BtnDnsClient_Click"
+                                    ToolTip="Dnscache service status — click to schedule disable / re-enable"/>
+                        </StackPanel>
+                    </Border>
+
+                    </StackPanel> <!-- /ControlsHalf -->
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Status bar: always shown; in tight mode the tabs sit in their own row beneath it. -->
+        <Border x:Name="StatusBarFrame" Grid.Row="2" Style="{StaticResource Hue.StatusBar}">
+            <Grid x:Name="StatusBar">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="Ready"/>
+                <TextBlock x:Name="CountText" Grid.Column="1" Foreground="{DynamicResource Brush.TextMuted}"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Tight-space tabs: the bottom row, under the status bar; switch the panel halves.
+             Two tabs always fit any width. RadioButtons with the theme's toggle look. -->
+        <Border x:Name="TabsFrame" Grid.Row="3" Style="{StaticResource Hue.StatusBar}" Visibility="Collapsed">
+            <StackPanel x:Name="BottomTabs" Orientation="Horizontal" Margin="0,4">
+                <StackPanel.Resources>
+                    <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+                        <Setter Property="Margin" Value="0,0,6,0"/>
+                    </Style>
+                </StackPanel.Resources>
+                <RadioButton x:Name="TabControls" GroupName="BottomHalf" Content="Controls"
+                             IsChecked="True" Checked="TabControls_Checked"/>
+                <RadioButton x:Name="TabStatus" GroupName="BottomHalf" Content="Status"
+                             Checked="TabStatus_Checked"/>
+            </StackPanel>
+        </Border>
+        <!-- Lock down, Purge Local and deleting a local rule: the whole window is covered while the
+             work runs, so nothing stale can be clicked, and what is under it is switched off
+             (Covered), so it takes no keys either. The rings always turn: Windows switches
+             animation off in remote sessions, where a still ring would read as a hang. -->
+        <busy:BusyOverlay x:Name="Busy" Grid.RowSpan="4" AnimateOverride="True"/>
+    </Grid>
+</Window>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AppIcons.xaml: FirewallManager's own icon geometries.
+    Same grammar as the Icon.* set in HueTheme.xaml: a 16 x 16 grid, drawn as strokes
+    (Style="{StaticResource Hue.Icon}": stroke 1.6, round caps and joins, stroke = text
+    colour). Path commands M L A C Z only, absolute, every command letter written out.
+    Merged in App.xaml after the theme, so these keys sit beside the kit's Icon.* set.
+    Generic keys (Clean ... Edit) would also fit the kit, but the kit is shared with other
+    programs, so they live here.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ================================================== APP-SPECIFIC (services) -->
+
+    <!-- Icon.Smb: Folder with a link bar inside (a network share). -->
+    <Geometry x:Key="Icon.Smb">M2,4.5 A1,1 0 0 1 3,3.5 L6.2,3.5 L7.6,5 L13,5 A1,1 0 0 1 14,6 L14,12.5 A1,1 0 0 1 13,13.5 L3,13.5 A1,1 0 0 1 2,12.5 Z M5.4,9.2 L10.6,9.2 M4.8,9.2 A0.6,0.6 0 1 1 6,9.2 A0.6,0.6 0 1 1 4.8,9.2 Z M10,9.2 A0.6,0.6 0 1 1 11.2,9.2 A0.6,0.6 0 1 1 10,9.2 Z</Geometry>
+
+    <!-- Icon.Rdp: Monitor on a stand with a pointer on the screen (remote control of a desktop). -->
+    <Geometry x:Key="Icon.Rdp">M3,2.5 L13,2.5 A1,1 0 0 1 14,3.5 L14,10 A1,1 0 0 1 13,11 L3,11 A1,1 0 0 1 2,10 L2,3.5 A1,1 0 0 1 3,2.5 Z M8,11 L8,13.5 M5.5,13.5 L10.5,13.5 M5.4,4.6 L10.8,6.5 L8.4,7.3 L7.5,9.4 Z</Geometry>
+
+    <!-- Icon.Http: Globe: outline, one meridian ellipse, two latitudes (thin enough to read at 16 px). -->
+    <Geometry x:Key="Icon.Http">M8,2 A6,6 0 1 0 8,14 A6,6 0 1 0 8,2 Z M8,2 A2.6,6 0 0 0 8,14 A2.6,6 0 0 0 8,2 Z M2.6,6 L13.4,6 M2.6,10 L13.4,10</Geometry>
+
+    <!-- Icon.Https: Globe with a padlock badge bottom-right (the lock tells it from HTTP). -->
+    <Geometry x:Key="Icon.Https">M11.6,6.8 A4.8,4.8 0 1 0 6.8,11.6 M6.8,2 A1.9,4.8 0 0 0 6.8,11.6 A1.9,4.8 0 0 0 6.8,2 M2,6.8 L11.6,6.8 M10,11 L14.2,11 L14.2,14.2 L10,14.2 Z M11.05,11 L11.05,9.9 A1.05,1.05 0 0 1 13.15,9.9 L13.15,11</Geometry>
+
+    <!-- Icon.Dns: Magnifier whose lens is a globe (looking up a name on the internet). -->
+    <Geometry x:Key="Icon.Dns">M2,6.8 A4.8,4.8 0 1 0 11.6,6.8 A4.8,4.8 0 1 0 2,6.8 Z M6.8,2 A1.9,4.8 0 0 0 6.8,11.6 A1.9,4.8 0 0 0 6.8,2 Z M2,6.8 L11.6,6.8 M10.3,10.3 L14,14</Geometry>
+
+    <!-- Icon.Iis: Server: two stacked units, each with a status light and a slot (a web server, inbound). -->
+    <Geometry x:Key="Icon.Iis">M3,2.5 L13,2.5 A0.5,0.5 0 0 1 13.5,3 L13.5,7 A0.5,0.5 0 0 1 13,7.5 L3,7.5 A0.5,0.5 0 0 1 2.5,7 L2.5,3 A0.5,0.5 0 0 1 3,2.5 Z M3,8.5 L13,8.5 A0.5,0.5 0 0 1 13.5,9 L13.5,13 A0.5,0.5 0 0 1 13,13.5 L3,13.5 A0.5,0.5 0 0 1 2.5,13 L2.5,9 A0.5,0.5 0 0 1 3,8.5 Z M5,5 L5.01,5 M5,11 L5.01,11 M8.5,5 L11,5 M8.5,11 L11,11</Geometry>
+
+    <!-- ================================================== GENERIC -->
+
+    <!-- Icon.Clean: Broom, upright: handle, binding band, four fanned bristles. -->
+    <Geometry x:Key="Icon.Clean">M8,1.8 L8,6.6 M5.4,6.6 L10.6,6.6 L10.6,8.6 L5.4,8.6 Z M5.4,8.6 L3.2,14 M10.6,8.6 L12.8,14 M6.9,10.4 L6.3,14 M9.1,10.4 L9.7,14</Geometry>
+
+    <!-- Icon.Shield: Shield outline. -->
+    <Geometry x:Key="Icon.Shield">M8,1.8 L13,3.6 L13,7.6 C13,10.7 10.9,12.9 8,14.2 C5.1,12.9 3,10.7 3,7.6 L3,3.6 Z</Geometry>
+
+    <!-- Icon.Log: Bulleted list: three dots, three lines (the last one shorter). -->
+    <Geometry x:Key="Icon.Log">M2.8,4 L2.81,4 M2.8,8 L2.81,8 M2.8,12 L2.81,12 M6,4 L13.5,4 M6,8 L13.5,8 M6,12 L11,12</Geometry>
+
+    <!-- Icon.Export: Arrow up out of a tray: the mirror of Icon.Import. -->
+    <Geometry x:Key="Icon.Export">M8,10.5 L8,2.5 M4.5,6 L8,2.5 L11.5,6 M3,13.5 L13,13.5</Geometry>
+
+    <!-- Icon.File: Document with a folded corner and two text lines. -->
+    <Geometry x:Key="Icon.File">M3.5,2 L9.5,2 L12.5,5 L12.5,14 L3.5,14 Z M9.5,2 L9.5,5 L12.5,5 M6,8.5 L10,8.5 M6,11 L10,11</Geometry>
+
+    <!-- Icon.Live: Lightning bolt. -->
+    <Geometry x:Key="Icon.Live">M9,1.8 L3.6,9 L7.8,9 L7,14.2 L12.4,7 L8.2,7 Z</Geometry>
+
+    <!-- Icon.Save: Floppy disk: body with a clipped corner, shutter on top, label below. -->
+    <Geometry x:Key="Icon.Save">M2.5,2.5 L11,2.5 L13.5,5 L13.5,13.5 L2.5,13.5 Z M5,2.5 L5,5.5 L10,5.5 L10,2.5 M5,13.5 L5,9.5 L11,9.5 L11,13.5</Geometry>
+
+    <!-- Icon.Add: Plus. -->
+    <Geometry x:Key="Icon.Add">M8,3 L8,13 M3,8 L13,8</Geometry>
+
+    <!-- Icon.Edit: Pencil, tip bottom-left, with the ferrule line. -->
+    <Geometry x:Key="Icon.Edit">M10.6,2.6 L13.4,5.4 L5.6,13.2 L2.4,13.6 L2.8,10.4 Z M9,4.2 L11.8,7</Geometry>
+
+    <!-- ================================================== RULES GRID (program column) -->
+
+    <!-- Icon.Program: Application window: frame, title bar, two title-bar dots. Stands in for a
+         program whose own icon can't be shown (not checked, or Windows has none for it). -->
+    <Geometry x:Key="Icon.Program">M2.5,3 L13.5,3 L13.5,13 L2.5,13 Z M2.5,5.8 L13.5,5.8 M4.4,4.4 L4.41,4.4 M6.2,4.4 L6.21,4.4</Geometry>
+
+    <!-- Icon.Fingerprint: Fingerprint, four nested ridges opening downwards. Pins: a program
+         approved by its exact content (SHA-256). -->
+    <Geometry x:Key="Icon.Fingerprint">M3.2,10.6 L3.2,8 A4.8,4.8 0 0 1 12.8,8 L12.8,9.6 M5.6,13.6 L5.6,8 A2.4,2.4 0 0 1 10.4,8 L10.4,11.2 C10.4,12.4 10.1,13.4 9.6,14.2 M8,8 L8,14.4 M1.8,5.6 A6.6,6.6 0 0 1 14.2,5.6</Geometry>
+
+    <!-- Icon.Alert: Warning triangle with an exclamation mark. A rule whose program isn't there:
+         the rule still allows whatever is put at that path. Drawn in the warning colour. -->
+    <Geometry x:Key="Icon.Alert">M8,2.2 L14.2,13.3 L1.8,13.3 Z M8,6.4 L8,9.3 M8,11.3 L8.01,11.3</Geometry>
+
+</ResourceDictionary>
