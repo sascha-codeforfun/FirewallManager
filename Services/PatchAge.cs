@@ -34,6 +34,27 @@ namespace FirewallManager
         }
 
         public static readonly DateTime Windows10EndOfSupport = new(2025, 10, 14);
+
+        /// <summary>
+        /// Flick's default when the settings file doesn't say: on for Home, Pro and the education
+        /// editions, off where it would be out of place, Enterprise (LTSC and IoT too) and Server.
+        /// </summary>
+        public static bool FlickByDefault()
+        {
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+                if (k == null) return true;
+                var type    = k.GetValue("InstallationType")?.ToString() ?? "";
+                var edition = k.GetValue("EditionID")?.ToString() ?? "";
+                if (type.StartsWith("Server", StringComparison.OrdinalIgnoreCase)) return false;
+                // EnterpriseS, IoTEnterprise(S), EnterpriseG…; ServerRdsh is Enterprise multi-session.
+                if (edition.Contains("Enterprise", StringComparison.OrdinalIgnoreCase)) return false;
+                if (edition.StartsWith("Server", StringComparison.OrdinalIgnoreCase)) return false;
+                return true;
+            }
+            catch { return true; }
+        }
         private static readonly TimeSpan Grace = TimeSpan.FromDays(7);
 
         public static State Read()

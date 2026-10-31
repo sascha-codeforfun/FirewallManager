@@ -16,7 +16,7 @@
        is. Raised with every delivered revision. A build script passing -p:Version=… wins
        over this value. No source-control hash appended, so Git and zip builds match. -->
   <PropertyGroup>
-    <Version>2.0.55</Version>
+    <Version>2.0.61</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 

@@ -1,12 +1,18 @@
 <Application x:Class="FirewallManager.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:kit="clr-namespace:HueThemeKit">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Theme/HueTheme.xaml" />
                 <ResourceDictionary Source="Theme/AppIcons.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- HueSwitch's default look as an implicit style, so a style set on the switch (also in a
+                 template) wins over it. Was a local value in the kit's constructor, which outranked
+                 template styles: see HueSwitch in HueThemeKit.cs. -->
+            <Style TargetType="kit:HueSwitch" BasedOn="{StaticResource Hue.Switch}"/>
 
             <!-- Network tag (rule list and log): Local green, Remote/Mixed amber, Any red,
                  No address / Unknown / None indigo.

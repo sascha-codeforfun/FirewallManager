@@ -25,6 +25,9 @@ namespace FirewallManager
     //  • the fingerprint button in the rules list hashes every pinned file, one by one.
     //  A pin that doesn't match shows as changed until the file is pinned again, or until
     //  a later check finds the pinned content back.
+    //
+    //  The same file keeps the app's one setting, Flick (the patch mascot in the header):
+    //  true or false once chosen in its picker; absent, the Windows edition decides.
     // ─────────────────────────────────────────────────────────────────────────
     internal static class Pins
     {
@@ -42,6 +45,7 @@ namespace FirewallManager
         private sealed class Store
         {
             public int Version { get; set; } = 1;
+            public bool? Flick { get; set; }
             public List<Pin> Pins { get; set; } = new();
         }
 
@@ -154,6 +158,24 @@ namespace FirewallManager
             if (toHash.Count > 0) _ = Task.Run(() => HashAll(toHash, null, CancellationToken.None));
         }
 
+        /// <summary>Flick as chosen in its picker; null when never chosen (the edition decides).</summary>
+        public static bool? Flick { get { lock (Gate) return Load().Flick; } }
+
+        /// <summary>Keeps the choice. Null, or why it couldn't be saved.</summary>
+        public static string? SetFlick(bool on)
+        {
+            RetryUnreadable();
+            lock (Gate)
+            {
+                var store = Load();
+                var before = store.Flick;
+                store.Flick = on;
+                var error = Save(store);
+                if (error != null) store.Flick = before;
+                return error;
+            }
+        }
+
         /// <summary>The pinned files, as keyed (full paths).</summary>
         public static List<string> Paths() { lock (Gate) return Load().Pins.Select(p => p.Path).ToList(); }
 
@@ -232,7 +254,11 @@ namespace FirewallManager
 
         // ── the file ──────────────────────────────────────────────────────────
 
-        private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
+        private static readonly JsonSerializerOptions Options = new()
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,   // no "Flick": null
+        };
 
         // A file that couldn't be read (fixed since, or locked by a scanner then) is read again
         // before a pin is changed, rather than refusing for the rest of the session.

@@ -114,8 +114,8 @@
         <!-- Header: app icon, name, one-line description. Click the icon = review consent. -->
         <Border Grid.Row="0" Style="{StaticResource Hue.Header}">
             <Grid>
-                <!-- Title and status strip share the free width: the title column is capped at its
-                     text's width (FitHeader), the strip column gets the rest and at least its pills.
+                <!-- Title and middle strip share the free width: the title column is capped at its
+                     text's width (FitHeader), the strip column gets the rest and at least its picker.
                      The weights make the title take the space first, so when narrow it clips. -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -136,6 +136,12 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Firewall Rule Manager" Style="{StaticResource Text.Title}"
                                    VerticalAlignment="Center"/>
+                        <!-- Facts about this machine, on the title line, which is shorter than the
+                             subtitle: they take no width of their own. Style, text and tooltip set from code. -->
+                        <ContentControl x:Name="Ipv4Pill" Style="{StaticResource Hue.Pill}" Content="IPv4 ?"
+                                        Margin="14,0,0,0" VerticalAlignment="Center"/>
+                        <ContentControl x:Name="Ipv6Pill" Style="{StaticResource Hue.Pill}" Content="IPv6 ?"
+                                        Margin="6,0,0,0" VerticalAlignment="Center"/>
                         <ContentControl x:Name="AdminWarning" Style="{StaticResource Hue.Pill.Warn}"
                                         Content="Run as Administrator for full access"
                                         Margin="14,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
@@ -145,17 +151,15 @@
                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
 
-                <!-- Status strip: facts about this machine, centred in the header's free middle.
-                     Room for more later. Style, text and tooltip set from code. -->
+                <!-- The header's free middle: Flick's picker on request, left-aligned, so all the room
+                     left over lands on the right, where the scene's door goes (SceneDoor). -->
                 <StackPanel x:Name="FamilyStrip" Grid.Column="2" Orientation="Horizontal"
-                            HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,0">
-                    <ContentControl x:Name="Ipv4Pill" Style="{StaticResource Hue.Pill}" Content="IPv4 ?"
-                                    VerticalAlignment="Center"/>
-                    <ContentControl x:Name="Ipv6Pill" Style="{StaticResource Hue.Pill}" Content="IPv6 ?"
-                                    Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0">
                     <!-- Flick, on request (Ctrl+click on the logo): show the plasters of any level and
                          play the scene, for machines that are never behind. -->
-                    <StackPanel x:Name="FlickPicker" Orientation="Horizontal" Margin="14,0,0,0" Visibility="Collapsed">
+                    <StackPanel x:Name="FlickPicker" Orientation="Horizontal" Visibility="Collapsed">
+                        <Button x:Name="FlickOnOff" Tag="onoff" Content="Flick on" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
+                                Margin="0,0,10,0" ToolTip="Kept in FirewallManager.json next to the app"/>
                         <Button Tag="real" Content="Real" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
                                 ToolTip="This machine's own patch level"/>
                         <Button Tag="1" Content="1" Style="{StaticResource Flick.Pick}" Click="FlickPick_Click"
@@ -582,10 +586,7 @@
 
                     <!-- GPO profile status (left half) -->
                     <DockPanel x:Name="GpoHalf" Grid.Column="0">
-                        <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0" Width="90">
-                            <TextBlock Text="GPO PROFILE" Style="{StaticResource Text.Section}"/>
-                            <TextBlock Text="STATUS"      Style="{StaticResource Text.Section}"/>
-                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
                         <ItemsControl x:Name="ProfilePanel">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
@@ -595,7 +596,7 @@
                                     <Border Style="{StaticResource PanelBox}" Margin="0,0,10,0" Padding="10,6">
                                         <StackPanel MinWidth="150">
                                             <TextBlock Text="{Binding ProfileName}" Style="{StaticResource Text.TileTitle}"
-                                                       Margin="0,0,0,6"/>
+                                                       Margin="0,0,0,6" ToolTip="{Binding Tip}"/>
                                             <!-- One safety switch per setting -->
                                             <ItemsControl ItemsSource="{Binding Toggles}">
                                                 <ItemsControl.ItemTemplate>
@@ -626,6 +627,55 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <!-- Defender: what a locked-down machine only waits for (DefenderCloud). Usable
+                             when all twelve profile switches are in their locked-down position; a
+                             switch still in its lockdown position after that is lifted turns red, and
+                             so does the box's border. Colours and words set from code. -->
+                        <Border x:Name="DefenderBox" Style="{StaticResource PanelBox}" Margin="0,0,10,0" Padding="10,6">
+                            <StackPanel Width="222">
+                                <!-- Title and a short status word in one row (the sentence is its tooltip), so
+                                     the box has exactly the profile boxes' height. -->
+                                <DockPanel Margin="0,0,0,6">
+                                    <TextBlock x:Name="DefenderNote" DockPanel.Dock="Right" FontSize="11" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="130" Margin="8,0,0,0"
+                                               ToolTipService.ShowOnDisabled="True"
+                                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                                    <TextBlock Text="Defender" Style="{StaticResource Text.TileTitle}"
+                                               ToolTip="Microsoft Defender settings that only wait for answers while the firewall is locked down. Available when all three profiles are locked down."/>
+                                </DockPanel>
+                                <ItemsControl x:Name="DefenderSwitches">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="66"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Brush.TextDim}"
+                                                           ToolTip="{Binding LabelTip}" Background="Transparent"
+                                                           FontSize="11" VerticalAlignment="Center"/>
+                                                <!-- The kit's signal switch, coloured from code through Tag (green: in its
+                                                     lockdown position while locked down; red: still there after the lockdown
+                                                     is lifted; neutral: Defender's own setting). A deliberate use of Tag:
+                                                     the base Signal style sets none itself. -->
+                                                <kit:HueSwitch Grid.Column="1" VerticalAlignment="Center"
+                                                               Style="{StaticResource Hue.Switch.Signal}"
+                                                               IsChecked="{Binding IsOn, Mode=OneWay}"
+                                                               Tag="{Binding Tone}"
+                                                               IsEnabled="{Binding CanChange}"
+                                                               Content="{Binding ValueText}" FontSize="11"
+                                                               StateChanging="DefenderSwitch_StateChanging"
+                                                               AutomationProperties.Name="{Binding Label}"
+                                                               ToolTip="{Binding Tip}"
+                                                               ToolTipService.ShowOnDisabled="True"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        </StackPanel>
                     </DockPanel>
 
                     <!-- Controls (right half) — consolidated so they toggle as a unit -->

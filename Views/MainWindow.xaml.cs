@@ -80,7 +80,9 @@ namespace FirewallManager
             Pins.Changed += OnPinsChanged;
             Closed += (_, _) => Pins.Changed -= OnPinsChanged;
             Pins.CheckAtStart();
+            DefenderSwitches.ItemsSource = _defenderSwitches;
             LoadRules();
+            ReadDefender();
             if (startup != null)
             {
                 // Nothing here is usable, and nothing writes, before the start-up writes are settled.
@@ -226,6 +228,9 @@ namespace FirewallManager
         private PatchScene? _patch;
         private PatchAge.State? _realPatch;
         private string _flickLevel = "real";   // what the plasters show: this machine, or a level picked
+        // Flick at all: as chosen (FirewallManager.json), else by edition. Off, a level picked or
+        // Play still shows it, without the timer ever playing the scene.
+        private bool _flickOn = Pins.Flick ?? PatchAge.FlickByDefault();
         private int? _sweepsSinceScene;   // null until the first scene
 
         private void ReadPatchAge(string osTooltip)
@@ -235,7 +240,7 @@ namespace FirewallManager
                 if (t.Status != System.Threading.Tasks.TaskStatus.RanToCompletion || _patch == null) return;
                 var state = t.Result;
                 _realPatch = state;
-                if (_flickLevel == "real") _patch.State = state;
+                if (_flickLevel == "real") _patch.State = _flickOn ? state : null;
                 if (state.LastUpdate is { } last)
                 {
                     var since = state.Missed switch
@@ -254,7 +259,7 @@ namespace FirewallManager
         private void SweepOrScene()
         {
             if (_patch == null || _patch.Running) return;
-            if ((_sweepsSinceScene is null or >= 3) && SceneDoor() is { } doorX)
+            if (_flickOn && (_sweepsSinceScene is null or >= 3) && SceneDoor() is { } doorX)
             {
                 _sweepsSinceScene = 0;
                 _ = _patch.PlayAsync(doorX);
@@ -297,11 +302,14 @@ namespace FirewallManager
         private void FlickPick_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button { Tag: string tag } || _patch == null) return;
+            if (tag == "onoff") { ToggleFlick(); return; }
             if (tag != "play") { PickFlickLevel(tag); return; }
             if (_patch.Running) return;
             if (_patch.State is not { Behind: true })
             {
-                SetStatus("This machine is up to date: nothing to patch. Pick a level to see one.");
+                SetStatus(_flickLevel == "real" && !_flickOn && _realPatch is { Behind: true }
+                    ? "Flick is off. Pick a level to see it, or turn it on."
+                    : "This machine is up to date: nothing to patch. Pick a level to see one.");
                 return;
             }
             if (HueContrast.IsActive) { SetStatus("The scene doesn't play with a contrast theme on."); return; }
@@ -324,16 +332,30 @@ namespace FirewallManager
                 "2"  => new PatchAge.State(DateTime.Today, 2, null),
                 "4"  => new PatchAge.State(DateTime.Today, 5, null),
                 "10" => new PatchAge.State(DateTime.Today, 0, _realPatch?.DaysSinceEndOfSupport ?? Math.Max(1, eol)),
-                _    => _realPatch,
+                _    => _flickOn ? _realPatch : null,
             };
             MarkFlickLevel();
+        }
+
+        private void ToggleFlick()
+        {
+            var error = Pins.SetFlick(!_flickOn);
+            if (error != null) { SetStatus($"Flick setting not saved: {error}.", true); return; }
+            _flickOn = !_flickOn;
+            if (_flickLevel == "real") _patch!.State = _flickOn ? _realPatch : null;
+            MarkFlickLevel();
+            SetStatus(_flickOn ? "Flick is on."
+                    : _flickLevel == "real" ? "Flick is off: no plasters, no scene."
+                    : "Flick is off: the level picked shows until you go back to Real.");
         }
 
         private void MarkFlickLevel()
         {
             foreach (var child in FlickPicker.Children)
-                if (child is Button { Tag: string tag } b && tag != "play")
+                if (child is Button { Tag: string tag } b && tag != "play" && tag != "onoff")
                     b.Style = (Style)FindResource(tag == _flickLevel ? "Flick.Picked" : "Flick.Pick");
+            FlickOnOff.Content = _flickOn ? "Flick on" : "Flick off";
+            FlickOnOff.Style   = (Style)FindResource(_flickOn ? "Flick.Picked" : "Flick.Pick");
         }
 
         private void Sweep()
@@ -420,9 +442,9 @@ namespace FirewallManager
             return state;
         }
 
-        // The strip centres in the header's free middle: the title column is as wide as its text
-        // and no wider, so the rest goes to the strip. When narrow, the title gives way first
-        // (its description clips) and the pills keep their size.
+        // The title column is as wide as its text (the IPv4/IPv6 pills ride on its title line) and no
+        // wider, so the rest goes to the middle strip, which holds Flick's picker when shown. When
+        // narrow, the title gives way first (its description clips).
         private void FitHeader()
         {
             var unbounded = new Size(double.PositiveInfinity, double.PositiveInfinity);
@@ -466,9 +488,11 @@ namespace FirewallManager
         private bool _showStatusTab;
         private bool _layoutQueued;
         private bool _applyingLayout;
-        private double _bothHalvesNeed;                // cached combined desired width (roomy)
-        private const double EnterMargin = 12;
-        private const double LeaveBuffer = 60;
+        private double _bothHalvesNeed;                // combined desired width of both halves
+        // One threshold for both directions: tabs below what the row needs, the row back as soon
+        // as it fits. The few pixels between only keep the edge from flickering.
+        private const double EnterMargin = 0;
+        private const double LeaveBuffer = 6;
 
         private void ScheduleBottomLayout()
         {
@@ -481,6 +505,19 @@ namespace FirewallManager
             }));
         }
 
+        // The children of a horizontal panel side by side, margins included.
+        private static double ChildrenWidth(Panel panel)
+        {
+            double width = 0;
+            foreach (UIElement child in panel.Children)
+            {
+                if (child.Visibility == Visibility.Collapsed) continue;
+                child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                width += child.DesiredSize.Width;
+            }
+            return width;
+        }
+
         private void ApplyBottomLayout()
         {
             if (GpoHalf == null || ControlsHalf == null || TabsFrame == null || BottomPanel == null) return;
@@ -488,16 +525,13 @@ namespace FirewallManager
             _applyingLayout = true;
             try
             {
-                double available = BottomPanel.ActualWidth;
+                // The width inside the card's padding, where the halves sit.
+                double available = BottomScroll.ActualWidth > 0 ? BottomScroll.ActualWidth : BottomPanel.ActualWidth;
 
-                // Measured only while both halves show: a collapsed half measures 0.
-                if (!_tabMode)
-                {
-                    GpoHalf.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                    ControlsHalf.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                    var need = GpoHalf.DesiredSize.Width + ControlsHalf.DesiredSize.Width;
-                    if (need > 0) _bothHalvesNeed = need;
-                }
+                // Measured in either mode, from the halves' children: a collapsed half itself
+                // measures 0, its children don't, so the need is current in tab mode too.
+                var need = ChildrenWidth(GpoHalf) + ChildrenWidth(ControlsHalf);
+                if (need > 0) _bothHalvesNeed = need;
 
                 // Hysteresis on content overflow.
                 if (!_tabMode && available > 0 && available < _bothHalvesNeed + EnterMargin) _tabMode = true;
@@ -785,8 +819,315 @@ namespace FirewallManager
         public class ProfileStatus
         {
             public string ProfileName { get; set; } = "";
+            public string Tip { get; set; } = "";
             public System.Collections.Generic.List<ProfileToggle> Toggles { get; set; } = new();
         }
+
+        // ── Defender while locked down ───────────────────────────────────────
+        //  Four switches next to the profiles (DefenderCloud): cloud lookups (A), sample sending (B),
+        //  block at first sight (C), and scanning of the other internal drives (D). B and C follow A:
+        //  with A off they are off and greyed. All four can be put in their lockdown position only
+        //  while all twelve profile switches are locked down; back towards Defender's own settings
+        //  is always allowed. One left in its lockdown position after the lockdown is lifted turns
+        //  red, and the box's border with it: the app doesn't stop you, but you see what you're doing.
+
+        public enum DefenderKind { Cloud, Samples, FirstSight, Drives }
+
+        public sealed class DefenderSwitch : INotifyPropertyChanged
+        {
+            public DefenderKind Kind { get; init; }
+            public string Label { get; init; } = "";      // short, beside the switch
+            public string LongName { get; init; } = "";   // in sentences
+            public string LabelTip { get; init; } = "";
+            public bool IsOn { get; set; }          // Defender's own behaviour (knob right)
+            public string ValueText { get; set; } = "";
+            public string Tone { get; set; } = "Neutral";   // Safe (green) / Unsafe (red) / Neutral
+            public bool CanChange { get; set; }
+            public string Tip { get; set; } = "";
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            public void Refresh() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(""));
+        }
+
+        private readonly ObservableCollection<DefenderSwitch> _defenderSwitches = new()
+        {
+            new() { Kind = DefenderKind.Cloud, Label = "Cloud", LongName = "cloud lookups",
+                    LabelTip = "Cloud lookups: Defender asks Microsoft's cloud about new files." },
+            new() { Kind = DefenderKind.Samples, Label = "Samples", LongName = "sample sending",
+                    LabelTip = "Sample sending: Defender sends files to Microsoft for analysis. Follows Cloud." },
+            new() { Kind = DefenderKind.FirstSight, Label = "First sight", LongName = "block at first sight",
+                    LabelTip = "Block at first sight: new files are held until the cloud's verdict. Follows Cloud." },
+            new() { Kind = DefenderKind.Drives, Label = "Drives", LongName = "scanning of the other drives",
+                    LabelTip = "Scanning of the internal drives other than the system drive. USB and network drives are always scanned." },
+        };
+
+        private bool _defenderPresent = DefenderCloud.Present();
+        private DefenderCloud.State? _defender;   // null until read
+        private bool _defenderReading;
+        private bool _defenderWriting;
+
+        /// <summary>All three profiles locked down: firewall on, inbound and outbound blocked, no merge.</summary>
+        private bool LockedDown =>
+            _profiles.Count == 3 && _profiles.All(p => p.Toggles.Count == 4 && p.Toggles.All(t => t.State == Safety.Safe));
+
+        /// <summary>Asks Defender in the background; the box says so meanwhile.</summary>
+        private async void ReadDefender()
+        {
+            _defenderPresent = DefenderCloud.Present();
+            if (!_defenderPresent || _defenderReading) { ShowDefender(); return; }
+            _defenderReading = true;
+            ShowDefender();
+            try { _defender = await System.Threading.Tasks.Task.Run(DefenderCloud.Read); }
+            catch (Exception ex) { _defender = new DefenderCloud.State(null, null, null, Array.Empty<string>(), null, ex.Message); }
+            finally { _defenderReading = false; }
+            ShowDefender();
+        }
+
+        private void ShowDefender()
+        {
+            if (DefenderBox == null) return;
+            var locked = LockedDown;
+            DefenderBox.ClearValue(Border.BorderBrushProperty);
+
+            if (!_defenderPresent)
+            {
+                DefenderSwitches.Visibility = Visibility.Collapsed;
+                Note("not present", "Microsoft Defender not present.");
+                return;
+            }
+            DefenderSwitches.Visibility = Visibility.Visible;
+            var st = _defender;
+            if (st == null || st.Error != null)
+            {
+                foreach (var sw in _defenderSwitches)
+                {
+                    sw.IsOn = true; sw.ValueText = st == null ? "Reading…" : "Unknown";
+                    sw.Tone = "Neutral"; sw.CanChange = false; sw.Tip = "";
+                    sw.Refresh();
+                }
+                if (st == null) Note("reading…", "Reading Defender's settings…");
+                else Note("unreadable", $"Defender's settings couldn't be read: {st.Error}.", "Brush.WarnText");
+                return;
+            }
+
+            var drives   = DefenderCloud.InternalDrives();
+            var excluded = drives.Where(st.Excluded).ToList();
+            // Exclusions this switch wrote for a drive that is gone or changed its letter: still
+            // "off", so they show and switching back removes them.
+            var stale    = DefenderCloud.PolicyDrives().Where(d => !drives.Contains(d, StringComparer.OrdinalIgnoreCase)).ToList();
+            excluded.AddRange(stale);
+            var notYet   = drives.Except(excluded, StringComparer.OrdinalIgnoreCase).ToList();
+            var busy     = _defenderWriting || _defenderReading;
+            var gpedit   = DefenderCloud.GpeditSets();
+            var system   = Letter(DefenderCloud.SystemRoot);
+            // The drives still scanned, by name: "Only C:", "C: and F:"; past three, just "Partly".
+            var scanned  = new[] { system }.Concat(notYet.Select(Letter)).ToList();
+            var drivesWord = excluded.Count == 0 && drives.Count > 0 ? "All"
+                           : scanned.Count == 1 ? $"Only {system}"
+                           : scanned.Count <= 3 ? Join(scanned) : "Partly";
+
+            var conflicts = new List<string>();
+            foreach (var sw in _defenderSwitches)
+            {
+                // B and C follow A: with the cloud off they do nothing, whatever their own values say.
+                var follows  = sw.Kind is DefenderKind.Samples or DefenderKind.FirstSight;
+                var inactive = follows && !st.CloudOn;
+                (bool on, string word) = sw.Kind switch
+                {
+                    _ when inactive         => (false, "Inactive"),
+                    DefenderKind.Cloud      => (st.CloudOn, st.CloudOn ? (st.Maps == 1 ? "Basic" : "On") : "Off"),
+                    DefenderKind.Samples    => (st.SamplesOn, st.Samples switch { 0 => "Ask", 1 => "Safe", 3 => "All", 2 => "Never", _ => "Unknown" }),
+                    DefenderKind.FirstSight => (st.FirstSightOn, st.FirstSightOn ? "On" : "Off"),
+                    _                       => (excluded.Count == 0, drivesWord),
+                };
+                sw.IsOn = on;
+                sw.ValueText = word;
+                var reduced = !on && !inactive;   // an inactive one goes with the cloud: counted there
+                sw.Tone = !reduced ? "Neutral" : locked ? "Safe" : "Unsafe";
+                if (reduced && !locked) conflicts.Add(sw.LongName);
+
+                var byGpedit = sw.Kind switch
+                {
+                    DefenderKind.Cloud      => gpedit.Cloud,
+                    DefenderKind.Samples    => gpedit.Samples,
+                    DefenderKind.FirstSight => gpedit.FirstSight,
+                    _                       => gpedit.Drives,
+                };
+
+                // Towards Defender's own setting: always. Towards the lockdown position: only locked down.
+                // A value the local Group Policy sets is gpedit's: it would write it back.
+                var noDrives = sw.Kind == DefenderKind.Drives && drives.Count == 0 && excluded.Count == 0;   // nothing to switch
+                sw.CanChange = _isAdmin && !busy && !noDrives && !inactive && !byGpedit
+                               && (!on || locked);
+                sw.Tip = sw.Kind switch
+                {
+                    DefenderKind.Cloud      => "Asking Microsoft's cloud about new files. Off also turns off sample sending and first sight.",
+                    DefenderKind.Samples    => "Sending files to Microsoft for analysis. Follows cloud lookups" + (inactive ? ": inactive while they are off." : "."),
+                    DefenderKind.FirstSight => "Holding new files until the cloud's verdict (block at first sight). Follows cloud lookups" + (inactive ? ": inactive while they are off." : "."),
+                    _ => drives.Count == 0
+                         ? $"No internal drive besides {system}. USB and network drives are always scanned."
+                         : $"Scanning of the internal drives other than {system}: {string.Join(", ", drives.Select(Letter))}. USB and network drives are always scanned.",
+                };
+                if (byGpedit) sw.Tip += "\n\n" + GpeditTip(sw.Kind);
+                sw.Refresh();
+            }
+
+            if (conflicts.Count > 0)
+            {
+                DefenderBox.SetResourceReference(Border.BorderBrushProperty, "Brush.Error");
+                Note("lockdown lifted",
+                     $"The firewall isn't locked down, but {Join(conflicts)} {(conflicts.Count == 1 ? "is" : "are")} still off." +
+                     (gpedit.Any ? " Some of it is set in the local Group Policy (gpedit)." : ""),
+                     "Brush.ErrorText");
+            }
+            else if (_isAdmin && locked && excluded.Count > 0 && notYet.Count > 0)
+                Note($"{string.Join(", ", notYet.Select(Letter))} still scanned",
+                     $"{string.Join(", ", notYet.Select(Letter))} still scanned (a drive added since): switch Drives on and off again to include it.",
+                     "Brush.WarnText");
+            else if (gpedit.Any)
+                Note("set by gpedit", "The local Group Policy (gpedit) sets " +
+                     Join(_defenderSwitches.Where(sw => sw.Kind switch
+                     {
+                         DefenderKind.Cloud => gpedit.Cloud, DefenderKind.Samples => gpedit.Samples,
+                         DefenderKind.FirstSight => gpedit.FirstSight, _ => gpedit.Drives,
+                     }).Select(sw => sw.LongName).ToList()) +
+                     ": change it there." +
+                     (!_isAdmin ? " Administrator rights needed for the others." : !locked ? " The others: available when all profiles are locked down." : ""));
+            else if (!_isAdmin)
+                Note("admin needed", "Administrator rights needed to change these.");
+            else if (!locked)
+                Note("needs lockdown", "Available when all profiles are locked down.");
+            else if (excluded.Count > 0)
+                Note($"{string.Join(", ", excluded.Select(Letter))} excluded", $"Excluded from scanning: {Join(excluded.Select(Letter).ToList())}.");
+            else
+                Note("", "");
+        }
+
+        // The short status beside the title; its sentence is the tooltip.
+        private void Note(string word, string sentence, string brush = "Brush.TextMuted")
+        {
+            DefenderNote.Text = word;
+            DefenderNote.ToolTip = sentence.Length > 0 ? sentence : null;
+            DefenderNote.SetResourceReference(TextBlock.ForegroundProperty, brush);
+        }
+
+        private static string Letter(string root) => root.TrimEnd('\\');
+
+        private static string GpeditTip(DefenderKind kind) => kind switch
+        {
+            DefenderKind.Cloud      => $"Set by the local Group Policy (gpedit):\n{DefenderCloud.GpeditMaps} → Join Microsoft MAPS.",
+            DefenderKind.Samples    => $"Set by the local Group Policy (gpedit):\n{DefenderCloud.GpeditMaps} → Send file samples when further analysis is required.",
+            DefenderKind.FirstSight => $"Set by the local Group Policy (gpedit):\n{DefenderCloud.GpeditMaps} → Configure the 'Block at First Sight' feature.",
+            _                       => $"Set by the local Group Policy (gpedit):\n{DefenderCloud.GpeditExclusions} → Path Exclusions.",
+        };
+
+        private static string Join(List<string> items) =>
+            items.Count <= 1 ? string.Join("", items) : string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1];
+
+        // The switch only asks; this confirms the lockdown direction, writes the policy, and reads
+        // back what Defender actually put in force.
+        private async void DefenderSwitch_StateChanging(object sender, HueSwitchChangingEventArgs e)
+        {
+            e.Cancel = true;
+            if (sender is not FrameworkElement { DataContext: DefenderSwitch sw } || _defender == null) return;
+            if (_busy || _defenderWriting) { SetStatus("Wait until the current task is done."); return; }
+            var turnOn = e.To == true;
+            var drives = DefenderCloud.InternalDrives();
+            var policyDrivesBefore = DefenderCloud.PolicyDrives();
+
+            if (!turnOn)
+            {
+                if (!LockedDown) { SetStatus("Available when all profiles are locked down."); return; }
+                var (title, text, verb) = sw.Kind switch
+                {
+                    DefenderKind.Cloud => ("Turn off Defender's cloud lookups?",
+                        "Defender stops asking Microsoft's cloud about new files. With every profile locked down it can't " +
+                        "reach the cloud anyway: it only waits. This also turns off sample sending and block at first sight.\n\n" +
+                        "Scanning on this machine continues. It writes Defender's policy.", "Turn off"),
+                    DefenderKind.Samples => ("Stop sending samples?",
+                        "Defender no longer sends files to Microsoft for analysis.\n\nIt writes Defender's policy.", "Stop sending"),
+                    DefenderKind.FirstSight => ("Turn off block at first sight?",
+                        "New files are no longer held for up to 10 seconds while Defender waits for the cloud's verdict.\n\n" +
+                        "It writes Defender's policy.", "Turn off"),
+                    _ => ("Stop scanning the other drives?",
+                        $"Defender stops scanning files on {Join(drives.Select(Letter).ToList())}. New files usually arrive on " +
+                        $"{Letter(DefenderCloud.SystemRoot)}, which is still scanned, as are USB and network drives. " +
+                        "Anything on these drives is trusted from now on.\n\nIt writes Defender's policy (path exclusions).", "Stop scanning"),
+                };
+                if (!ThemedDialog.Confirm(this, title, text, verb, danger: true)) return;
+            }
+
+            _defenderWriting = true;
+            ShowDefender();
+            var what = $"{char.ToUpperInvariant(sw.LongName[0])}{sw.LongName[1..]} → {(turnOn ? "Defender's own setting" : "off")}";
+            try
+            {
+                switch (sw.Kind)
+                {
+                    case DefenderKind.Cloud:      DefenderCloud.SetCloud(turnOn); break;
+                    case DefenderKind.Samples:    DefenderCloud.SetSamples(turnOn); break;
+                    case DefenderKind.FirstSight: DefenderCloud.SetFirstSight(turnOn); break;
+                    default:                      DefenderCloud.SetDrives(scan: turnOn, drives); break;
+                }
+            }
+            catch (Exception ex)
+            {
+                _defenderWriting = false;
+                SetStatus($"Couldn't change {sw.LongName}: {ex.Message.TrimEnd('.')}.", error: true);
+                ReadDefender();
+                return;
+            }
+
+            // Defender picks policy changes up by itself, usually within seconds: ask twice.
+            SetStatus($"{what}: written, checking what Defender applies…", Tone.Applying);
+            DefenderCloud.State? now = null;
+            foreach (var wait in new[] { 1500, 4000 })
+            {
+                await System.Threading.Tasks.Task.Delay(wait);
+                now = await System.Threading.Tasks.Task.Run(DefenderCloud.Read);
+                if (now.Error == null && Applied(sw.Kind, turnOn, now, drives, policyDrivesBefore)) break;
+            }
+            _defenderWriting = false;
+            _defender = now ?? _defender;
+            ShowDefender();
+
+            if (now?.Error != null)
+                SetStatus($"{what}: written, but Defender's settings couldn't be read back ({now.Error}).", error: true);
+            else if (now != null && Applied(sw.Kind, turnOn, now, drives, policyDrivesBefore))
+                SetStatus($"{what}: in force.", Tone.InForce);
+            else
+            {
+                // Name the local Group Policy when it sets what didn't apply (for the cloud also B and C,
+                // which switching it on gives back to Defender).
+                var gp = DefenderCloud.GpeditSets();
+                var held = sw.Kind switch
+                {
+                    DefenderKind.Cloud      => gp.Cloud || (turnOn && (gp.Samples || gp.FirstSight)),
+                    DefenderKind.Samples    => gp.Samples,
+                    DefenderKind.FirstSight => gp.FirstSight,
+                    _                       => gp.Drives,
+                };
+                if (held)
+                    SetStatus($"{what}: written, but the local Group Policy (gpedit) sets it: " +
+                              $"{(sw.Kind == DefenderKind.Drives ? DefenderCloud.GpeditExclusions : DefenderCloud.GpeditMaps)}.", error: true);
+                else
+                    SetStatus($"{what}: written, but Defender doesn't apply it. A setting made in Windows Security or with " +
+                              "Set-MpPreference, a Group Policy setting (gpedit), or this edition of Windows, may keep it as it is" +
+                              (_defender?.TamperProtected == true ? "; Tamper Protection is on." : "."), error: true);
+            }
+        }
+
+        // Switching drives back on removes this switch's exclusions only; one set in Windows Security
+        // or with Set-MpPreference stays, and then Defender still reports that drive excluded.
+        private static bool Applied(DefenderKind kind, bool on, DefenderCloud.State st, List<string> drives,
+                                    List<string> policyDrivesBefore) => kind switch
+        {
+            DefenderKind.Cloud      => on ? st.CloudOn : !st.CloudOn && !st.SamplesOn && !st.FirstSightOn,
+            DefenderKind.Samples    => st.SamplesOn == on,
+            DefenderKind.FirstSight => st.FirstSightOn == on,
+            _ => on ? DefenderCloud.PolicyDrives().Count == 0 && !policyDrivesBefore.Any(st.Excluded)
+                    : drives.All(st.Excluded),
+        };
 
         // ── Loading ──────────────────────────────────────────────────────────
 
@@ -976,6 +1317,7 @@ namespace FirewallManager
             _profiles.Add(ReadProfile("Private", "PrivateProfile"));
             _profiles.Add(ReadProfile("Public",  "PublicProfile"));
             RefreshMergeState();
+            ShowDefender();   // its switches depend on the twelve above
         }
 
         // A missing key (nothing set yet) is also where the switches write.
@@ -1006,6 +1348,12 @@ namespace FirewallManager
             return new ProfileStatus
             {
                 ProfileName = label,
+                Tip = label switch
+                {
+                    "Domain"  => "Group Policy firewall profile used when this machine is connected to its Active Directory domain.",
+                    "Private" => "Group Policy firewall profile used on networks marked as private, such as home or office.",
+                    _         => "Group Policy firewall profile used on networks marked as public, such as cafés and hotels, and on any network Windows can't classify.",
+                },
                 Toggles =
                 {
                     Mk("Firewall", "EnableFirewall",        1, "ON",    "OFF",   fw),
@@ -1294,6 +1642,7 @@ namespace FirewallManager
             ProgramIcons.Clear();   // a program installed or removed since shows as it is now
             ProgramTrust.Clear();   // and signed, replaced or updated since
             LoadRules();
+            ReadDefender();         // and Defender as it is now
         }
 
         private void Logo_Click(object sender, MouseButtonEventArgs e)

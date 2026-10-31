@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,7 +17,9 @@ namespace FirewallManager
     //  Windows name while this machine is behind on cumulative updates (PatchAge), and,
     //  on a wide window, Flick: the flame from the app's icon, who comes out of a door,
     //  patches the name up, and — on Windows 10 past its end of support — shakes its
-    //  head and holds up how many days it has been, then trudges back.
+    //  head, flares up red and holds up how many days it has been, then trudges back.
+    //  The further behind, the wearier: slower steps, heavy lids, a sigh; long overdue,
+    //  a plaster slips and has to be picked up; a year past end of support, a yawn.
     //
     //  Ctrl+click on the logo shows a level picker next to the status pills: the plasters of
     //  any level, and the scene on request, for machines that are never behind.
@@ -75,7 +78,7 @@ namespace FirewallManager
 
     // ── Flick ──────────────────────────────────────────────────────────────────
 
-    internal enum FlickPose { Idle, Walk1, Walk2, Think, Patch, Shake, Sign, Nod }
+    internal enum FlickPose { Idle, Walk1, Walk2, Think, Patch, Shake, Sign, Nod, Stoop, Yawn, Flare }
 
     /// <summary>The mascot, drawn in a 40 × 60 box with its feet on y = 56. Scaled by its container.</summary>
     internal sealed class Flick : Canvas
@@ -96,7 +99,8 @@ namespace FirewallManager
         private readonly Path _tongue = new() { Fill = Pink };
         private readonly Path _cheeks = new() { Fill = Pink, Opacity = 0.45 };
         private readonly Path _tear = new() { Fill = Tear, Data = Art.G("M28.6,30.2 Q29.6,32.1 28.6,32.9 Q27.6,32.1 28.6,30.2 Z") };
-        private readonly Canvas _held;
+        private readonly Canvas _held, _heldBox;
+        private readonly Path _flame;
         private readonly TextBlock _signDays = new() { FontWeight = FontWeights.ExtraBold, FontSize = 22, Foreground = Art.B("#B91C1C"), TextAlignment = TextAlignment.Center, Width = SignW };
         private const double SignW = 120, SignH = 44;
 
@@ -104,6 +108,22 @@ namespace FirewallManager
         public const double HeldX = 21, HeldY = 15.5;
 
         public RotateTransform HeadTurn { get; } = new(0, 20, 44);
+
+        /// <summary>The flame on the head: its colours (white core to the edge), and a scale from its base.</summary>
+        public GradientStop[] FlameStops { get; }
+        public ScaleTransform FlameScale { get; } = new(1, 1, 21, 26);
+        public UIElement Flame => _flame;
+
+        /// <summary>The held plaster can fall: a drop from the hands, and a spin about its centre.</summary>
+        public TranslateTransform HeldFall { get; } = new();
+        public RotateTransform HeldSpin { get; } = new(0, HeldX, HeldY);
+
+        /// <summary>A breath of air from the mouth (a sigh), and smoke from the flame's tip.</summary>
+        public Canvas SighPuff { get; } = Puff(27.5, 37.5, 0.8, "#94A3B8");
+        public Canvas Smoke { get; } = Puff(16, 0.5, 1.25, "#64748B");   // above the flared flame's tip
+
+        /// <summary>The scene's level (0–3): heavier lids and a flatter mouth the further behind.</summary>
+        public int Weariness { get; set; }
         public Canvas Sign { get; } = new() { Width = SignW, Height = SignH };
 
         public Flick()
@@ -118,7 +138,10 @@ namespace FirewallManager
                 GradientStops = { new GradientStop(Colors.White, 0), new GradientStop(Art.C("#CFFAFE"), 0.35), new GradientStop(Art.C("#22D3EE"), 0.8), new GradientStop(Art.C("#0891B2"), 1) } };
             _head.RenderTransform = HeadTurn;
             _head.Children.Add(new Path { Fill = body, Data = Art.G(Art.Ell(20, 33.5, 12, 11.6)) });
-            _head.Children.Add(new Path { Fill = flame, Data = Art.G("M13.5,25 C12.2,18 17.8,16.2 16.6,9.5 C20.8,12.4 24.6,15 24,21.6 C25.8,20.4 26.6,18.6 26.8,16.4 C30.4,21.2 28.6,25.4 26.6,26.6 Z") });
+            FlameStops = flame.GradientStops.ToArray();
+            _flame = new Path { Fill = flame, RenderTransform = FlameScale,
+                Data = Art.G("M13.5,25 C12.2,18 17.8,16.2 16.6,9.5 C20.8,12.4 24.6,15 24,21.6 C25.8,20.4 26.6,18.6 26.8,16.4 C30.4,21.2 28.6,25.4 26.6,26.6 Z") };
+            _head.Children.Add(_flame);
             for (var i = 0; i < 2; i++)
             {
                 var cx = i == 0 ? 15.3 : 24.7;
@@ -133,7 +156,11 @@ namespace FirewallManager
             Children.Add(_head);
 
             _held = Plaster.Make(18, 6.3, -12, contrast: false);
-            Children.Add(Art.At(_held, HeldX - 9, HeldY - 3.15));
+            _heldBox = new Canvas { RenderTransform = new TransformGroup { Children = { HeldSpin, HeldFall } } };
+            _heldBox.Children.Add(Art.At(_held, HeldX - 9, HeldY - 3.15));
+            Children.Add(_heldBox);
+            Children.Add(SighPuff);
+            Children.Add(Smoke);
 
             // The sign, held out to the left at head height by its right edge (the header has no room
             // above the head): "381 days" over "since end of support".
@@ -149,6 +176,15 @@ namespace FirewallManager
         }
 
         public string SignDays { set => _signDays.Text = value; }
+
+        // A small cloud of three overlapping puffs (nonzero fill, so no holes where they overlap).
+        private static Canvas Puff(double x, double y, double s, string colour)
+        {
+            var c = new Canvas { Opacity = 0, IsHitTestVisible = false, RenderTransform = new TranslateTransform() };
+            c.Children.Add(new Path { Fill = Art.B(colour), Data = Art.G("F1 " +
+                Art.Ell(x, y, 2.2 * s, 1.8 * s) + Art.Ell(x + 2.4 * s, y - 1.2 * s, 1.8 * s, 1.5 * s) + Art.Ell(x + 0.9 * s, y - 2.7 * s, 1.5 * s, 1.3 * s)) });
+            return c;
+        }
 
         public void Look(double dx, double dy)
         {
@@ -178,6 +214,9 @@ namespace FirewallManager
                 FlickPose.Think => ("M9,35 L5.5,41 M31,35 L26,39.8", (5.2, 41.5), (24.8, 40.4)),
                 FlickPose.Shake => ("M9,36 L6.5,43 M31,36 L33.5,43", (6.3, 43.5), (33.7, 43.5)),
                 FlickPose.Sign  => ("M9,34 L-1.5,30.5 M31,35 L34.5,41", (-1.8, 30.4), (34.8, 41.5)),
+                FlickPose.Stoop => ("M9,36 L17,49.5 M31,36 L25,49.5", (17.0, 50.0), (25.0, 50.0)),
+                FlickPose.Yawn  => ("M9,34 L4,24 M31,34 L36,24", (3.8, 23.4), (36.2, 23.4)),
+                FlickPose.Flare => ("M9,35 L3.5,38 M31,35 L36.5,38", (3.2, 38.2), (36.8, 38.2)),
                 _               => ("M9,35 L5.5,41 M31,35 L34.5,41", (5.2, 41.5), (34.8, 41.5)),
             };
             _arms.Data  = Art.G(arms);
@@ -186,10 +225,15 @@ namespace FirewallManager
             var (lids, brows, mouth, cheeks, tear) = (sad ? FlickPose.Shake : pose) switch
             {
                 FlickPose.Patch => (0.0, "focus", "tongue", true, false),
-                FlickPose.Think => (0.0, "up", "o", true, false),
+                FlickPose.Think => (Weariness >= 3 ? 0.3 : 0.0, "up", "o", true, false),
                 FlickPose.Shake => (0.45, "worried", "flat", false, false),
                 FlickPose.Sign  => (0.25, "worried", "flat", false, true),
                 FlickPose.Nod   => (0.4, "none", "grin", true, false),
+                FlickPose.Stoop => (0.2, "worried", "o", false, false),
+                FlickPose.Yawn  => (0.75, "none", "yawn", false, false),
+                FlickPose.Flare => (0.0, "alarm", "o", false, false),
+                _ when Weariness >= 3 => (0.38, "none", "flat", false, false),
+                _ when Weariness == 2 => (0.2, "up", "smile", true, false),
                 _               => (0.0, "up", "smile", true, false),
             };
             _lids.Data = lids > 0 ? Art.G(Lids(lids)) : null;
@@ -198,6 +242,7 @@ namespace FirewallManager
                 "up"      => Art.G("M13,25 Q15.3,23.6 17.6,24.8 M22.4,24.8 Q24.7,23.6 27,25"),
                 "worried" => Art.G("M13,25.4 Q15.6,24.9 17.6,23.4 M22.4,23.4 Q24.4,24.9 27,25.4"),
                 "focus"   => Art.G("M13,24.2 Q15.4,24.2 17.6,25.2 M22.4,25.2 Q24.6,24.2 27,24.2"),
+                "alarm"   => Art.G("M12.8,24 Q15.3,21.6 17.8,23.2 M22.2,23.2 Q24.7,21.6 27.2,24"),
                 _         => null,
             };
             _mouthLine.Data = mouth switch
@@ -211,17 +256,19 @@ namespace FirewallManager
             {
                 "grin" => Art.G("M16.8,37.6 Q20,42.2 23.2,37.6 Z"),
                 "o"    => Art.G(Art.Ell(20, 38.8, 1.3, 1.6)),
+                "yawn" => Art.G(Art.Ell(20, 39.4, 2.5, 3.1)),
                 _      => null,
             };
             _tongue.Data = mouth switch
             {
                 "grin"   => Art.G("M18.2,39.6 Q20,41 21.8,39.6 Z"),
+                "yawn"   => Art.G("M18.2,41.4 Q20,40 21.8,41.4 Q20,42.6 18.2,41.4 Z"),
                 "tongue" => Art.G("M21,38.9 Q22.6,39.1 22.6,40.5 Q21.2,40.9 20.7,39.6 Z"),
                 _        => null,
             };
             _cheeks.Data = cheeks ? Art.G(Art.Ell(12.6, 36, 2, 1.2) + Art.Ell(27.4, 36, 2, 1.2)) : null;
             _tear.Visibility = tear ? Visibility.Visible : Visibility.Collapsed;
-            _held.Visibility = pose == FlickPose.Patch ? Visibility.Visible : Visibility.Collapsed;
+            _heldBox.Visibility = pose is FlickPose.Patch or FlickPose.Stoop ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private static string Lids(double amount)
@@ -247,7 +294,12 @@ namespace FirewallManager
     internal sealed class PatchScene
     {
         private const double Scale = 1.0;            // Flick about 57 units tall
-        private const double Speed = 95;             // walking, units per second
+        private const double Speed = 95;             // walking, units per second, when one update behind
+        private const double Stride = 0.16;          // seconds per step, likewise
+
+        // This run's gait: slower the further behind.
+        private double _speed = Speed, _stride = Stride, _bob = 1.5;
+        private bool _trudge;
 
         /// <summary>The free width left of the Windows block the scene needs: the door, and the sign beside Flick.</summary>
         public const double Room = 170;
@@ -333,7 +385,12 @@ namespace FirewallManager
             _cts = new CancellationTokenSource();
             var cancel = _cts.Token;
             var door = new Door();
-            var flick = new Flick();
+            var flick = new Flick { Weariness = state.Level };
+            var pace = state.Level >= 3 ? 0.72 : state.Level == 2 ? 0.88 : 1.0;
+            _speed = Speed * pace; _stride = Stride / pace;
+            _bob = state.Level >= 3 ? 0.8 : 1.5;
+            _trudge = state.Level >= 3;
+            flick.Pose(FlickPose.Idle);
             var holder = new Canvas { Width = 40 * Scale, Height = 60 * Scale };
             var bob = new TranslateTransform();
             flick.RenderTransform = new TransformGroup { Children = { new ScaleTransform(Scale, Scale), bob } };
@@ -379,6 +436,8 @@ namespace FirewallManager
                     flick.Pose(FlickPose.Think); flick.Look(0.4, -1.0);
                     await Wait(0.35, cancel);
                     flick.Pose(FlickPose.Patch); flick.Look(0.6, -1.2);
+                    // Long overdue, tired hands: the middle plaster slips and has to be picked up.
+                    if (state.Level >= 3 && i == 1) await DropAndPickUpAsync(flick, cancel);
                     await Animate(bob, TranslateTransform.YProperty, -reach, 0.22, cancel, overshoot: true);
                     await Wait(0.2, cancel);
                     await Grow(Plaster.Scale(plasters[i]), 0.25, cancel);
@@ -397,6 +456,9 @@ namespace FirewallManager
                     bob.BeginAnimation(TranslateTransform.YProperty, null); bob.Y = 0;
                 }
 
+                // Two or more behind: a sigh at the work done.
+                if (state.Level >= 2) await SighAsync(flick, cancel);
+
                 // Back off to just left of the name, to look at the work (and, on Windows 10, so the
                 // sign held out to the left goes over the free header, not over the name).
                 x = await WalkAsync(flick, holder, facing, bob, x, titleOrigin.X - 24 * Scale, Place, cancel);
@@ -406,17 +468,23 @@ namespace FirewallManager
 
                 if (state.DaysSinceEndOfSupport is { } days)
                 {
-                    // Windows 10 past its end of support: a slow head shake, then the sign, held a good while.
+                    // A year and more past its end of support: a yawn first.
+                    if (days > 365) await YawnAsync(flick, cancel);
+                    // Windows 10 past its end of support: a slow head shake, a red flare at the number,
+                    // then the sign, held a good while with the flame burnt low.
                     flick.Pose(FlickPose.Shake); flick.Look(0, 0.6);
                     await ShakeAsync(flick.HeadTurn, 9, 4, 1.6, cancel);
+                    await FlareAsync(flick, cancel);
                     flick.SignDays = $"{days} days";
                     flick.Pose(FlickPose.Sign);
                     await Grow((ScaleTransform)flick.Sign.RenderTransform, 0.3, cancel);
                     await Wait(8, cancel);
                     await Shrink((ScaleTransform)flick.Sign.RenderTransform, 0.25, cancel);
                     flick.Pose(FlickPose.Shake);
-                    // Back to the door, still shaking its head.
+                    // Back to the door, still shaking its head; the flame slowly finds its cyan again.
+                    var cool = CoolAsync(flick, Math.Abs(doorCentre - x) / _speed, cancel);
                     x = await WalkAsync(flick, holder, facing, bob, x, doorCentre, Place, cancel, shakeHead: true);
+                    await cool;
                 }
                 else
                 {
@@ -452,13 +520,13 @@ namespace FirewallManager
         }
 
         // Walks from x to target: legs alternate, a little bob, facing the way it goes.
-        private static async Task<double> WalkAsync(Flick flick, Canvas holder, ScaleTransform facing, TranslateTransform bob,
+        private async Task<double> WalkAsync(Flick flick, Canvas holder, ScaleTransform facing, TranslateTransform bob,
                                                     double from, double to, Action<double> place, CancellationToken cancel,
                                                     bool shakeHead = false)
         {
             if (Math.Abs(to - from) < 0.5) return from;
             facing.ScaleX = to < from ? -1 : 1;
-            var seconds = Math.Abs(to - from) / Speed;
+            var seconds = Math.Abs(to - from) / _speed;
             var started = DateTime.UtcNow;
             var step = -1;
             while (true)
@@ -466,13 +534,14 @@ namespace FirewallManager
                 cancel.ThrowIfCancellationRequested();
                 var t = Math.Min(1, (DateTime.UtcNow - started).TotalSeconds / seconds);
                 place(from + (to - from) * t);
-                var phase = (int)((DateTime.UtcNow - started).TotalSeconds / 0.16);
+                var phase = (int)((DateTime.UtcNow - started).TotalSeconds / _stride);
                 if (phase != step)
                 {
                     step = phase;
                     flick.Pose(phase % 2 == 0 ? FlickPose.Walk1 : FlickPose.Walk2, sad: shakeHead);
                     if (shakeHead) flick.Look(0, 0.6);
-                    bob.Y = phase % 2 == 0 ? 0 : -1.5;
+                    else if (_trudge) flick.Look(0.6, 0.8);   // eyes on the floor
+                    bob.Y = phase % 2 == 0 ? 0 : -_bob;
                 }
                 if (shakeHead) flick.HeadTurn.Angle = 7 * Math.Sin((DateTime.UtcNow - started).TotalSeconds * 7);
                 if (t >= 1) break;
@@ -481,7 +550,130 @@ namespace FirewallManager
             bob.Y = 0;
             flick.HeadTurn.Angle = 0;
             flick.Pose(shakeHead ? FlickPose.Shake : FlickPose.Idle);
+            if (_trudge && !shakeHead) flick.Look(0, 0);
             return to;
+        }
+
+        // ── the weary and the cross bits ─────────────────────────────────────
+
+        // The red of the flare, and the low ember it burns down to while the sign is up;
+        // in the order of the flame's stops (core to edge). Cyan is the flame's own.
+        private static readonly Color[] Red   = { Art.C("#FFF7ED"), Art.C("#FDE047"), Art.C("#EF4444"), Art.C("#991B1B") };
+        private static readonly Color[] Ember = { Art.C("#FED7AA"), Art.C("#FB923C"), Art.C("#C2410C"), Art.C("#7C2D12") };
+        private static readonly Color[] Cyan  = { Colors.White,     Art.C("#CFFAFE"), Art.C("#22D3EE"), Art.C("#0891B2") };
+
+        // The held plaster slips, falls spinning to the floor; a look down, a stoop, and it's back in hand.
+        private static async Task DropAndPickUpAsync(Flick flick, CancellationToken cancel)
+        {
+            await Wait(0.25, cancel);
+            var floor = 56.5 - 2.5 - Flick.HeldY;                        // its centre just above the feet line
+            await Task.WhenAll(
+                Run(flick.HeldFall, TranslateTransform.YProperty, new DoubleAnimation(floor, TimeSpan.FromSeconds(0.38))
+                    { FillBehavior = FillBehavior.HoldEnd, EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } }, cancel),
+                Animate(flick.HeldSpin, RotateTransform.AngleProperty, 35, 0.38, cancel));
+            flick.Pose(FlickPose.Stoop); flick.Look(0.2, 1.4);           // "oh."
+            await Wait(0.45, cancel);
+            await Animate(flick.HeadTurn, RotateTransform.AngleProperty, 9, 0.3, cancel);
+            await Wait(0.3, cancel);
+            await Task.WhenAll(
+                Animate(flick.HeldFall, TranslateTransform.YProperty, 0, 0.35, cancel),
+                Animate(flick.HeldSpin, RotateTransform.AngleProperty, 0, 0.35, cancel),
+                Animate(flick.HeadTurn, RotateTransform.AngleProperty, 0, 0.35, cancel));
+            Settle(flick.HeldFall, TranslateTransform.YProperty, 0);
+            Settle(flick.HeldSpin, RotateTransform.AngleProperty, 0);
+            Settle(flick.HeadTurn, RotateTransform.AngleProperty, 0);
+            flick.Pose(FlickPose.Patch); flick.Look(0.6, -1.2);
+            await Wait(0.2, cancel);
+        }
+
+        // Arms down, lids down, a breath of air drifts off.
+        private static async Task SighAsync(Flick flick, CancellationToken cancel)
+        {
+            flick.Pose(FlickPose.Shake); flick.Look(0, 0.6);
+            await PuffAsync(flick.SighPuff, 7, -5, 0.9, cancel);
+            await Wait(0.2, cancel);
+            flick.Pose(FlickPose.Idle); flick.Look(0, 0);
+        }
+
+        // Arms up, head back, mouth wide.
+        private static async Task YawnAsync(Flick flick, CancellationToken cancel)
+        {
+            flick.Pose(FlickPose.Yawn); flick.Look(0, -0.5);
+            await Animate(flick.HeadTurn, RotateTransform.AngleProperty, -7, 0.5, cancel);
+            await Wait(0.9, cancel);
+            await Animate(flick.HeadTurn, RotateTransform.AngleProperty, 0, 0.4, cancel);
+            Settle(flick.HeadTurn, RotateTransform.AngleProperty, 0);
+            flick.Pose(FlickPose.Idle); flick.Look(0, 0);
+            await Wait(0.3, cancel);
+        }
+
+        // Eyes wide; the flame shoots up red and flickers for about a second, a puff of smoke,
+        // then it burns down small and dim.
+        private static async Task FlareAsync(Flick flick, CancellationToken cancel)
+        {
+            flick.Pose(FlickPose.Flare); flick.Look(0, -0.4);
+            var s = flick.FlameScale;
+            await Task.WhenAll(
+                Recolour(flick, Red, 0.18, cancel),
+                Animate(s, ScaleTransform.ScaleXProperty, 1.2, 0.25, cancel, overshoot: true),
+                Animate(s, ScaleTransform.ScaleYProperty, 1.5, 0.25, cancel, overshoot: true));
+            Settle(s, ScaleTransform.ScaleXProperty, 1.2);
+            Settle(s, ScaleTransform.ScaleYProperty, 1.5);
+            var started = DateTime.UtcNow;
+            Task? smoke = null;
+            while (true)
+            {
+                cancel.ThrowIfCancellationRequested();
+                var t = (DateTime.UtcNow - started).TotalSeconds;
+                if (t >= 0.8) break;
+                if (smoke == null && t >= 0.45) smoke = PuffAsync(flick.Smoke, 3, -16, 1.3, cancel);
+                s.ScaleY = 1.5 + 0.09 * Math.Sin(t * 41);
+                s.ScaleX = 1.2 + 0.05 * Math.Sin(t * 33 + 1);
+                await Task.Delay(16, cancel);
+            }
+            flick.Pose(FlickPose.Shake); flick.Look(0, 0.6);
+            await Task.WhenAll(
+                Recolour(flick, Ember, 0.6, cancel),
+                Animate(s, ScaleTransform.ScaleXProperty, 0.85, 0.6, cancel),
+                Animate(s, ScaleTransform.ScaleYProperty, 0.78, 0.6, cancel),
+                Fade(flick.Flame, 0.75, 0.6, cancel));
+            if (smoke != null) await smoke;
+        }
+
+        // Back to its own cyan and size over the given time.
+        private static Task CoolAsync(Flick flick, double seconds, CancellationToken cancel)
+        {
+            seconds = Math.Max(1.5, seconds);
+            return Task.WhenAll(
+                Recolour(flick, Cyan, seconds, cancel),
+                Animate(flick.FlameScale, ScaleTransform.ScaleXProperty, 1, seconds, cancel),
+                Animate(flick.FlameScale, ScaleTransform.ScaleYProperty, 1, seconds, cancel),
+                Fade(flick.Flame, 1, seconds, cancel));
+        }
+
+        private static Task Recolour(Flick flick, Color[] to, double seconds, CancellationToken cancel) =>
+            Task.WhenAll(flick.FlameStops.Select((stop, i) =>
+                Run(stop, GradientStop.ColorProperty, new ColorAnimation(to[i], TimeSpan.FromSeconds(seconds)) { FillBehavior = FillBehavior.HoldEnd }, cancel)));
+
+        // A puff shows, drifts by (dx, dy) and fades on the way.
+        private static async Task PuffAsync(Canvas puff, double dx, double dy, double seconds, CancellationToken cancel)
+        {
+            var move = (TranslateTransform)puff.RenderTransform;
+            Settle(move, TranslateTransform.XProperty, 0);
+            Settle(move, TranslateTransform.YProperty, 0);
+            Settle(puff, UIElement.OpacityProperty, 0);
+            await Fade(puff, 0.85, 0.15, cancel);
+            await Task.WhenAll(
+                Animate(move, TranslateTransform.XProperty, dx, seconds, cancel),
+                Animate(move, TranslateTransform.YProperty, dy, seconds, cancel),
+                Fade(puff, 0, seconds, cancel));
+        }
+
+        // Drops a held animation and sets the plain value (a held animation outranks a set value).
+        private static void Settle(IAnimatable target, DependencyProperty property, double value)
+        {
+            target.BeginAnimation(property, null);
+            ((DependencyObject)target).SetValue(property, value);
         }
 
         private static async Task ShakeAsync(RotateTransform head, double degrees, int times, double seconds, CancellationToken cancel)
@@ -519,16 +711,18 @@ namespace FirewallManager
 
         /// <summary>A from-current animation that finishes as a task; cancelling stops it where it is.</summary>
         internal static Task Animate(IAnimatable target, DependencyProperty property, double to, double seconds,
-                                     CancellationToken cancel, bool overshoot = false)
-        {
-            cancel.ThrowIfCancellationRequested();
-            var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var animation = new DoubleAnimation(to, TimeSpan.FromSeconds(seconds))
+                                     CancellationToken cancel, bool overshoot = false) =>
+            Run(target, property, new DoubleAnimation(to, TimeSpan.FromSeconds(seconds))
             {
                 FillBehavior = FillBehavior.HoldEnd,
                 EasingFunction = overshoot ? new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 }
                                            : new SineEase { EasingMode = EasingMode.EaseInOut },
-            };
+            }, cancel);
+
+        private static Task Run(IAnimatable target, DependencyProperty property, AnimationTimeline animation, CancellationToken cancel)
+        {
+            cancel.ThrowIfCancellationRequested();
+            var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             animation.Completed += (_, _) => done.TrySetResult(true);
             var registration = cancel.Register(() =>
             {

@@ -221,9 +221,13 @@ public class HueSwitch : ToggleButton
     private FrameworkElement? _track;
     private double? _clickX;
 
+    // FirewallManager change to the suite kit (2.0.59): the default style used to be set here, in
+    // the constructor, as a local value. WPF ranks a local value above a style set in a template,
+    // so inside a DataTemplate every switch silently kept the plain Hue.Switch look and its
+    // Hue.Switch.Signal colours (red, amber, Tag) never showed. The default now comes from an
+    // implicit style (App.xaml), which any explicit style overrides. Fold into the kit when reconciling.
     public HueSwitch()
     {
-        SetResourceReference(StyleProperty, "Hue.Switch");
     }
 
     /// <summary>Raised before a user-initiated change. Set Cancel to keep the current state.</summary>
