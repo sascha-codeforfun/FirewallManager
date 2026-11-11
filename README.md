@@ -130,6 +130,15 @@ On first launch the app requires you to acknowledge what it does and accept resp
 
 ---
 
+## Before you build or run it
+
+- **Needs administrator rights:** runs as administrator; Windows asks when it starts.
+- **Changes security settings:** changes Windows Firewall, audit policy and Microsoft Defender settings.
+- **Starts on its own:** creates a scheduled task.
+- **Starts other programs:** sc, ipconfig, gpupdate, powershell, netsh, auditpol, reg and schtasks.
+- **Changes the whole computer:** writes the registry under HKLM and files on the system drive.
+- **Talks to other computers:** connects to claude.ai, api.anthropic.com and api.nuget.org.
+
 ## Requirements
 
 - **Windows 10 or 11, or Windows Server 2019** (tested: build 17763.3650), x64.
